@@ -145,4 +145,4 @@ dist
 
 
 .backend/server/ssl/cert.pem
-.backend/server/ssl/key.pem
+.backend/server/ssl/key.pem"backend/server/ssl" 
