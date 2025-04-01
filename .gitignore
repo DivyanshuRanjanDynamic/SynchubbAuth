@@ -144,4 +144,5 @@ dist
 # End of https://www.toptal.com/developers/gitignore/api/node
 
 
-.server/ssl
+.backend/server/ssl/cert.pem
+.backend/server/ssl/key.pem
