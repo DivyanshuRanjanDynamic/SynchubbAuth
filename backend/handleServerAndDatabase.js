@@ -63,10 +63,10 @@ ${privateKey}
         }
 
       //  Write certificates securely
-        fs.writeFileSync(`${sslDir}/key.pem`, privateKey);
-        fs.writeFileSync(`${sslDir}/cert.pem`, publicKey);
+        fs.writeFileSync(`${sslDir}/server.key`, privateKey);
+        fs.writeFileSync(`${sslDir}/server.cert`, publicKey);
 
-        return { privateKey, publicKey };
+        return { privateKey, publicKey };c
     } 
     catch (error) {
         throw new Error(`Failed to generate certificates: ${error.message}`);
