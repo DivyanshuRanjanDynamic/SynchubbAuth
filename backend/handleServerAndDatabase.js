@@ -63,8 +63,8 @@ ${privateKey}
         }
 
       //  Write certificates securely
-        fs.writeFileSync(`${sslDir}/server.key`, privateKey);
-        fs.writeFileSync(`${sslDir}/server.cert`, publicKey);
+        fs.writeFileSync(`${sslDir}/key.pem`, privateKey);
+        fs.writeFileSync(`${sslDir}/cert.pem`, publicKey);
 
         return { privateKey, publicKey };c
     } 
