@@ -13,25 +13,19 @@ username:
     trim:true,
     index:true
 },
-googleId:
-{
-    type:String
-},
-gitHubId:{
-    type:String
-},
+password: { 
+    type: String, 
+    required: function () { return !this.googleId && !this.githubId; } // Only required for local users 
+  },
+  googleId: { type: String, default: null, sparse: true }, // Now optional for non-Google users
+  githubId: { type: String, default: null , sparse: true}, // Now optional for non-GitHub users
+
  email:{
     type:String,
     required:true,
     unique:true
  },
- password:
- {
-   type:String,
-   required: function () {
-    return !this.googleId && !this.gitHubId; // Required only if not using OAuth
- }
-},
+
 refreshToken:
 {
     type:String, 
@@ -61,7 +55,9 @@ resetPasswordExpireAt:
 //Before saving the user data in db firstly hash the password using bcript.Use "pre" keyword to make changes on user  before saving it.
 //hasing of data took time thats why we use async function
 userSchema.pre('save', function(next) {
-    if (this && this.isModified && this.isModified('password')) {
+    if (!this.password) return next(); // ✅ Avoid hashing if password is missing
+
+    if ( this.isModified && this.isModified('password')) {
         this.password = bcrypt.hashSync(this.password, 10);
     }
     next();

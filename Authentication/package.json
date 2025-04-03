@@ -2,9 +2,9 @@
   "name": "synchubbauth",
   "version": "1.0.0",
   "description": "",
-  "main": "backend/handleServer&database.js",
+  "main": "Auth/handleServerAndDatabase.js",
   "scripts": {
-    "dev": "nodemon backend/handleServerAndDatabase.js"
+    "dev": "nodemon Authentication/Auth/handleServerAndDatabase.js"
   },
   "keywords": [],
   "author": "",

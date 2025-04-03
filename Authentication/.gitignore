@@ -144,5 +144,9 @@ dist
 # End of https://www.toptal.com/developers/gitignore/api/node
 
 
-.backend/server/ssl/cert.pem
-.backend/server/ssl/key.pem"backend/server/ssl" 
+# Ignore SSL certificates
+server/ssl/
+server/ssl/*.pem
+server/ssl/*.crt
+server/ssl/*.key
+server/ssl/*.csr
