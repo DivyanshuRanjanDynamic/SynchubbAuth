@@ -15,7 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // SSL Path inside Auth Service
-const sslDir = path.join(__dirname, 'ssl');
+const sslDir = path.join(__dirname,'server', 'ssl');
 const keyPath = path.join(sslDir, 'key.pem');
 const certPath = path.join(sslDir, 'cert.pem');
 
