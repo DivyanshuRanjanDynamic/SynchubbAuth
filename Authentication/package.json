@@ -4,7 +4,7 @@
   "description": "",
   "main": "Auth/handleServerAndDatabase.js",
   "scripts": {
-    "start": "Authentication/Auth/handleServerAndDatabase.js"
+    "dev": " nodemon Authentication/Auth/handleServerAndDatabase.js"
   },
   "keywords": [],
   "author": "",

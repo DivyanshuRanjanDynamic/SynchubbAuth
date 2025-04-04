@@ -11,8 +11,8 @@ RUN chown -R appuser:appgroup /usr/src/app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies (including dev dependencies for development)
+RUN npm install
 
 # Copy source code
 COPY --chown=appuser:appgroup . .
@@ -39,5 +39,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8000/api/auth/health || exit 1
 
-# Start the application
-CMD ["npm", "start"] 
+# Start the application (default to development mode)
+CMD ["npm", "run", "dev"] 
