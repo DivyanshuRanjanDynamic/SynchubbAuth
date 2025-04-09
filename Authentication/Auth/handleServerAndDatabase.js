@@ -139,7 +139,7 @@ const startServer = async () => {
 
         const httpsServer = https.createServer(options, app);
         
-        const port = process.env.PORT || 8000;
+        const port = process.env.PORT || 7000;
         await httpsServer.listen(port);
         console.log(`Server running on port ${port}`);
 

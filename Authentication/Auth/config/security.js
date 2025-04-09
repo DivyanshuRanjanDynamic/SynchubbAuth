@@ -52,20 +52,22 @@ export const redisClient = createClient({
     password: process.env.REDIS_PASSWORD,
     database: parseInt(process.env.REDIS_DB || '0'),
     socket: {
-        reconnectStrategy: (retries) => Math.min(retries * 50, 1000),
-        tls: process.env.NODE_ENV === 'production',
+        reconnectStrategy: (retries) => {
+            console.log(`Redis reconnection attempt ${retries}`);
+            return Math.min(retries * 50, 1000);
+        },
+        tls: true,
         rejectUnauthorized: false
     }
 });
 
 redisClient.on('error', (err) => {
     console.error('Redis Client Error:', err);
-    // Implement retry logic or fallback mechanism here
+    // Don't throw the error, just log it
 });
 
 redisClient.on('connect', () => {
     console.log('Redis Client Connected');
-    // Implement any post-connection setup here
 });
 
 redisClient.on('ready', () => {
@@ -85,12 +87,13 @@ export const initializeRedis = async () => {
         // Test the connection
         const ping = await redisClient.ping();
         if (ping !== 'PONG') {
-            throw new Error('Redis connection test failed');
+            console.error('Redis connection test failed');
+            return false;
         }
+        return true;
     } catch (error) {
         console.error('Redis connection failed:', error);
-        // Implement fallback mechanism or retry logic here
-        throw error;
+        return false;
     }
 };
 

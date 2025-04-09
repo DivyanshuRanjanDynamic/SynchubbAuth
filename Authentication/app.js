@@ -5,7 +5,6 @@ import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { Strategy as GitHubStrategy } from 'passport-github2';
-import connectDB from './Auth/db/connectDB.js';
 import authRoutes from './Auth/routes/auth.route.js';
 import mongoose from 'mongoose';
 import path from 'path';
