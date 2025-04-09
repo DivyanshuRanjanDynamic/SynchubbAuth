@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: auth-service
+    env: docker
+    plan: free
+    rootDir: Authentication
+    dockerfilePath: ./Authentication/Dockerfile
+    dockerCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8000
+      - key: MONGO_URI
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
+    healthCheckPath: /health
+    autoDeploy: true 
