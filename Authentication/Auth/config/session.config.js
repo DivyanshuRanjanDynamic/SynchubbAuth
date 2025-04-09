@@ -5,7 +5,7 @@ import { logger } from '../utils/logger.js';
 
 // Create Redis client
 const redisClient = createClient({
-    url: process.env.REDIS_URL || 'redis://redis:6379',
+    url: process.env.REDIS_URL ,
     legacyMode: true
 });
 
