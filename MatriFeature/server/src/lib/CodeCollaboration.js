@@ -1,226 +1,203 @@
-import { createLogger } from 'winston';
-import { format, transports } from 'winston';
-import Redis from 'ioredis';
-import { v4 as uuidv4 } from 'uuid';
-import { EventEmitter } from 'events';
-
-const logger = createLogger({
-    level: 'info',
-    format: format.combine(
-        format.timestamp(),
-        format.json()
-    ),
-    transports: [
-        new transports.File({ filename: 'error.log', level: 'error' }),
-        new transports.File({ filename: 'combined.log' })
-    ]
-});
-
-class CodeCollaboration extends EventEmitter {
+class CodeCollaboration {
     constructor() {
-        super();
-        this.redis = new Redis({
-            host: process.env.REDIS_HOST || 'localhost',
-            port: process.env.REDIS_PORT || 6379,
-            password: process.env.REDIS_PASSWORD
-        });
-        this.collaborators = new Map();
-        this.cursors = new Map();
-        this.selections = new Map();
-        this.initializeRedisPubSub();
+      this.reviews = new Map(); // Map of fileId to review objects
+      this.comments = new Map(); // Map of fileId to comment arrays
+      this.threads = new Map(); // Map of commentId to reply arrays
+      this.suggestions = new Map(); // Map of fileId to suggestion arrays
     }
-
-    async initializeRedisPubSub() {
-        await this.redis.subscribe('code-collaboration', (err) => {
-            if (err) {
-                logger.error('Failed to subscribe to code collaboration events:', err);
-            }
-        });
-
-        this.redis.on('message', (channel, message) => {
-            if (channel === 'code-collaboration') {
-                this.handleCollaborationEvent(JSON.parse(message));
-            }
-        });
+  
+    createReview(fileId, reviewData) {
+      const reviewId = `${fileId}-${Date.now()}`;
+      const review = {
+        id: reviewId,
+        fileId,
+        status: 'open',
+        ...reviewData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        comments: [],
+        suggestions: [],
+        resolution: null
+      };
+  
+      this.reviews.set(reviewId, review);
+      return review;
     }
-
-    async joinSession(userId, sessionId) {
-        try {
-            const sessionKey = `session:${sessionId}`;
-            await this.redis.sadd(sessionKey, userId);
-            
-            this.collaborators.set(userId, {
-                sessionId,
-                joinedAt: Date.now(),
-                lastActive: Date.now()
-            });
-
-            // Notify other collaborators
-            await this.redis.publish('code-collaboration', JSON.stringify({
-                type: 'user_joined',
-                userId,
-                sessionId,
-                timestamp: Date.now()
-            }));
-
-            logger.info(`User ${userId} joined session ${sessionId}`);
-            return { success: true };
-        } catch (error) {
-            logger.error(`Failed to join session ${sessionId}:`, error);
-            throw error;
+  
+    updateReviewStatus(reviewId, status, resolution = null) {
+      const review = this.reviews.get(reviewId);
+      if (!review) {
+        throw new Error('Review not found');
+      }
+  
+      review.status = status;
+      review.updatedAt = new Date().toISOString();
+      if (resolution) {
+        review.resolution = resolution;
+      }
+  
+      return review;
+    }
+  
+    addComment(fileId, commentData) {
+      const commentId = `${fileId}-${Date.now()}`;
+      const comment = {
+        id: commentId,
+        fileId,
+        ...commentData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        replies: []
+      };
+  
+      if (!this.comments.has(fileId)) {
+        this.comments.set(fileId, []);
+      }
+      this.comments.get(fileId).push(comment);
+  
+      // If comment is part of a review, add it to the review
+      if (commentData.reviewId) {
+        const review = this.reviews.get(commentData.reviewId);
+        if (review) {
+          review.comments.push(comment);
         }
+      }
+  
+      return comment;
     }
-
-    async leaveSession(userId, sessionId) {
-        try {
-            const sessionKey = `session:${sessionId}`;
-            await this.redis.srem(sessionKey, userId);
-            
-            this.collaborators.delete(userId);
-            this.cursors.delete(userId);
-            this.selections.delete(userId);
-
-            // Notify other collaborators
-            await this.redis.publish('code-collaboration', JSON.stringify({
-                type: 'user_left',
-                userId,
-                sessionId,
-                timestamp: Date.now()
-            }));
-
-            logger.info(`User ${userId} left session ${sessionId}`);
-            return { success: true };
-        } catch (error) {
-            logger.error(`Failed to leave session ${sessionId}:`, error);
-            throw error;
+  
+    addReply(commentId, replyData) {
+      const reply = {
+        id: `${commentId}-${Date.now()}`,
+        commentId,
+        ...replyData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+  
+      if (!this.threads.has(commentId)) {
+        this.threads.set(commentId, []);
+      }
+      this.threads.get(commentId).push(reply);
+  
+      // Add reply to parent comment
+      for (const comments of this.comments.values()) {
+        const parentComment = comments.find(c => c.id === commentId);
+        if (parentComment) {
+          parentComment.replies.push(reply);
+          break;
         }
+      }
+  
+      return reply;
     }
-
-    async updateCursor(userId, sessionId, position) {
-        try {
-            this.cursors.set(userId, {
-                position,
-                updatedAt: Date.now()
-            });
-
-            // Notify other collaborators
-            await this.redis.publish('code-collaboration', JSON.stringify({
-                type: 'cursor_update',
-                userId,
-                sessionId,
-                position,
-                timestamp: Date.now()
-            }));
-
-            return { success: true };
-        } catch (error) {
-            logger.error(`Failed to update cursor for user ${userId}:`, error);
-            throw error;
+  
+    addSuggestion(fileId, suggestionData) {
+      const suggestionId = `${fileId}-${Date.now()}`;
+      const suggestion = {
+        id: suggestionId,
+        fileId,
+        ...suggestionData,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+  
+      if (!this.suggestions.has(fileId)) {
+        this.suggestions.set(fileId, []);
+      }
+      this.suggestions.get(fileId).push(suggestion);
+  
+      // If suggestion is part of a review, add it to the review
+      if (suggestionData.reviewId) {
+        const review = this.reviews.get(suggestionData.reviewId);
+        if (review) {
+          review.suggestions.push(suggestion);
         }
+      }
+  
+      return suggestion;
     }
-
-    async updateSelection(userId, sessionId, selection) {
-        try {
-            this.selections.set(userId, {
-                selection,
-                updatedAt: Date.now()
-            });
-
-            // Notify other collaborators
-            await this.redis.publish('code-collaboration', JSON.stringify({
-                type: 'selection_update',
-                userId,
-                sessionId,
-                selection,
-                timestamp: Date.now()
-            }));
-
-            return { success: true };
-        } catch (error) {
-            logger.error(`Failed to update selection for user ${userId}:`, error);
-            throw error;
+  
+    updateSuggestionStatus(suggestionId, status, resolution = null) {
+      for (const suggestions of this.suggestions.values()) {
+        const suggestion = suggestions.find(s => s.id === suggestionId);
+        if (suggestion) {
+          suggestion.status = status;
+          suggestion.updatedAt = new Date().toISOString();
+          if (resolution) {
+            suggestion.resolution = resolution;
+          }
+          return suggestion;
         }
+      }
+      throw new Error('Suggestion not found');
     }
-
-    async broadcastEdit(userId, sessionId, edit) {
-        try {
-            // Apply operational transform if needed
-            const transformedEdit = await this.transformEdit(edit);
-
-            // Notify other collaborators
-            await this.redis.publish('code-collaboration', JSON.stringify({
-                type: 'edit',
-                userId,
-                sessionId,
-                edit: transformedEdit,
-                timestamp: Date.now()
-            }));
-
-            return { success: true };
-        } catch (error) {
-            logger.error(`Failed to broadcast edit from user ${userId}:`, error);
-            throw error;
+  
+    getFileComments(fileId) {
+      return this.comments.get(fileId) || [];
+    }
+  
+    getCommentThread(commentId) {
+      return this.threads.get(commentId) || [];
+    }
+  
+    getFileSuggestions(fileId) {
+      return this.suggestions.get(fileId) || [];
+    }
+  
+    getFileReviews(fileId) {
+      return Array.from(this.reviews.values()).filter(review => review.fileId === fileId);
+    }
+  
+    deleteComment(commentId) {
+      for (const [fileId, comments] of this.comments.entries()) {
+        const index = comments.findIndex(c => c.id === commentId);
+        if (index !== -1) {
+          comments.splice(index, 1);
+          // Clean up replies
+          this.threads.delete(commentId);
+          return true;
         }
+      }
+      return false;
     }
-
-    async transformEdit(edit) {
-        // Implement operational transform logic here
-        // This is a placeholder for the actual transformation logic
-        return edit;
-    }
-
-    async getCollaborators(sessionId) {
-        try {
-            const sessionKey = `session:${sessionId}`;
-            const collaborators = await this.redis.smembers(sessionKey);
-            
-            const collaboratorData = collaborators.map(userId => ({
-                userId,
-                cursor: this.cursors.get(userId),
-                selection: this.selections.get(userId),
-                ...this.collaborators.get(userId)
-            }));
-
-            return { success: true, collaborators: collaboratorData };
-        } catch (error) {
-            logger.error(`Failed to get collaborators for session ${sessionId}:`, error);
-            throw error;
+  
+    deleteSuggestion(suggestionId) {
+      for (const [fileId, suggestions] of this.suggestions.entries()) {
+        const index = suggestions.findIndex(s => s.id === suggestionId);
+        if (index !== -1) {
+          suggestions.splice(index, 1);
+          return true;
         }
+      }
+      return false;
     }
-
-    async handleCollaborationEvent(event) {
-        const { type, userId, sessionId, ...data } = event;
-
-        switch (type) {
-            case 'user_joined':
-                this.emit('userJoined', { userId, sessionId, ...data });
-                break;
-            case 'user_left':
-                this.emit('userLeft', { userId, sessionId, ...data });
-                break;
-            case 'cursor_update':
-                this.emit('cursorUpdate', { userId, sessionId, ...data });
-                break;
-            case 'selection_update':
-                this.emit('selectionUpdate', { userId, sessionId, ...data });
-                break;
-            case 'edit':
-                this.emit('edit', { userId, sessionId, ...data });
-                break;
-            default:
-                logger.warn(`Unknown collaboration event type: ${type}`);
-        }
+  
+    deleteReview(reviewId) {
+      const review = this.reviews.get(reviewId);
+      if (!review) {
+        return false;
+      }
+  
+      // Delete associated comments and suggestions
+      review.comments.forEach(comment => {
+        this.deleteComment(comment.id);
+      });
+  
+      review.suggestions.forEach(suggestion => {
+        this.deleteSuggestion(suggestion.id);
+      });
+  
+      return this.reviews.delete(reviewId);
     }
-
-    async close() {
-        try {
-            await this.redis.quit();
-            logger.info('Closed CodeCollaboration');
-        } catch (error) {
-            logger.error('Failed to close CodeCollaboration:', error);
-            throw error;
-        }
+  
+    clear() {
+      this.reviews.clear();
+      this.comments.clear();
+      this.threads.clear();
+      this.suggestions.clear();
     }
-}
-
-export default new CodeCollaboration();
+  }
+  
+  export default CodeCollaboration;
