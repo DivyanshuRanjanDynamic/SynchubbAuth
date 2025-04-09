@@ -6,6 +6,14 @@ import fs from "fs";
 import crypto from 'crypto';
 import path from "path";
 import { fileURLToPath } from 'url';
+import cors from 'cors';
+import { 
+    limiter, 
+    corsOptions, 
+    helmetConfig, 
+    initializeRedis,
+    compressionMiddleware 
+} from './config/security.js';
 
 // Configure environment variables
 dotenv.config({ path: "./.env" });
@@ -18,6 +26,12 @@ const __dirname = path.dirname(__filename);
 const sslDir = path.join(__dirname,'server', 'ssl');
 const keyPath = path.join(sslDir, 'key.pem');
 const certPath = path.join(sslDir, 'cert.pem');
+
+// Apply security middleware
+app.use(helmetConfig);
+app.use(limiter);
+app.use(cors(corsOptions));
+app.use(compressionMiddleware);
 
 // Debug function to analyze certificate files
 function debugCertificateFiles() {
@@ -95,29 +109,36 @@ const generateCertificatePair = async () => {
     }
 }
 
+// Add health check endpoint
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    });
+});
+
 // Start server with HTTPS
 const startServer = async () => {
     try {
+        // Initialize Redis
+        await initializeRedis();
+
+        // Connect to MongoDB
+        await connectDB();
+
         // Generate certificates if they don't exist
-        const sslDir = path.join(__dirname, 'server', 'ssl');
-        if (!fs.existsSync(path.join(sslDir, 'key.pem')) || !fs.existsSync(path.join(sslDir, 'cert.pem'))) {
+        if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
             await generateCertificatePair();
         }
 
-        // Debug certificate files
-        const { key, cert } = debugCertificateFiles();
-        
         const options = {
-            key: fs.readFileSync(path.join(sslDir, 'key.pem')),
-            cert: fs.readFileSync(path.join(sslDir, 'cert.pem'))
+            key: fs.readFileSync(keyPath),
+            cert: fs.readFileSync(certPath)
         };
 
         const httpsServer = https.createServer(options, app);
         
-        // Connect to database before starting server
-        await connectDB();
-        
-        // Start server
         const port = process.env.PORT || 8000;
         await httpsServer.listen(port);
         console.log(`Server running on port ${port}`);

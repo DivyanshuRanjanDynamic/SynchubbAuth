@@ -2,126 +2,170 @@ import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-const userSchema= new mongoose.Schema( {
-username:
-{
-
-    type:String,
-    required:true,
-    unique:true,
-    lowercase:true,
-    trim:true,
-    index:true
-},
-password: { 
-    type: String, 
-    required: function () { return !this.googleId && !this.githubId; } // Only required for local users 
-  },
-  googleId: { type: String, default: null, sparse: true }, // Now optional for non-Google users
-  githubId: { type: String, default: null , sparse: true}, // Now optional for non-GitHub users
-
- email:{
-    type:String,
-    required:true,
-    unique:true
- },
-
-refreshToken:
-{
-    type:String, 
-},
-isVerified:{
-    type:Boolean,
-    default:false
-},
-role:
-{
-    type:String,
-    enum:["user","admin"],
-    default:"user"
-},
-resetPasswordToken:
-{
-    type:String,
-},
-resetPasswordExpireAt:
-{
-    type:Date,
-}
-}, {timestamps:true} );
-    // this give us two fields createdAt and updatedAt  automatically
-
-
-//Before saving the user data in db firstly hash the password using bcript.Use "pre" keyword to make changes on user  before saving it.
-//hasing of data took time thats why we use async function
-userSchema.pre('save', function(next) {
-    if (!this.password) return next(); // ✅ Avoid hashing if password is missing
-
-    if ( this.isModified && this.isModified('password')) {
-        this.password = bcrypt.hashSync(this.password, 10);
+const userSchema = new mongoose.Schema({
+    username: {
+        type: String,
+        required: true,
+        unique: true,
+        lowercase: true,
+        trim: true,
+        index: true
+    },
+    password: { 
+        type: String, 
+        required: function () { return !this.googleId && !this.githubId; }
+    },
+    googleId: { type: String, default: null, sparse: true },
+    githubId: { type: String, default: null, sparse: true },
+    email: {
+        type: String,
+        required: true,
+        unique: true
+    },
+    refreshToken: {
+        type: String,
+    },
+    isVerified: {
+        type: Boolean,
+        default: false
+    },
+    role: {
+        type: String,
+        enum: ["user", "admin"],
+        default: "user"
+    },
+    // Token versioning
+    tokenVersion: {
+        type: Number,
+        default: 0
+    },
+    // Email verification
+    emailVerificationToken: {
+        type: String,
+        default: null
+    },
+    emailVerificationExpireAt: {
+        type: Date,
+        default: null
+    },
+    // Password reset
+    resetPasswordToken: {
+        type: String,
+        default: null
+    },
+    resetPasswordExpireAt: {
+        type: Date,
+        default: null
+    },
+    // Session management
+    lastLogin: {
+        type: Date,
+        default: null
+    },
+    lastLoginIp: {
+        type: String,
+        default: null
+    },
+    loginAttempts: {
+        type: Number,
+        default: 0
+    },
+    lockUntil: {
+        type: Date,
+        default: null
+    },
+    // Profile information
+    profilePic: {
+        type: String,
+        default: ""
+    },
+    // Security preferences
+    twoFactorEnabled: {
+        type: Boolean,
+        default: false
+    },
+    twoFactorSecret: {
+        type: String,
+        default: null
+    },
+    // Account status
+    isActive: {
+        type: Boolean,
+        default: true
+    },
+    deactivatedAt: {
+        type: Date,
+        default: null
     }
-    next();
+}, { timestamps: true });
+
+// Indexes for better query performance
+userSchema.index({ email: 1 });
+userSchema.index({ resetPasswordToken: 1 });
+userSchema.index({ emailVerificationToken: 1 });
+
+// Password hashing middleware
+userSchema.pre('save', async function(next) {
+    if (!this.isModified('password')) return next();
+    
+    try {
+        const salt = await bcrypt.genSalt(12);
+        this.password =  bcrypt.hash(this.password, salt);
+        next();
+    } catch (error) {
+        next(error);
+    }
 });
-// now we will sucessfully able to hash the password whenever we make update on it .
 
-//now compare the hash password with real password
-userSchema.methods.comparePassword = async function(password) {
-    if (!password) {
-        throw new Error("Entered password is undefined");
-    }
-    return await bcrypt.compare(password, this.password);
-}
+// Password comparison method
+userSchema.methods.comparePassword = async function(candidatePassword) {
+    return await bcrypt.compare(candidatePassword, this.password);
+};
 
-
-
-// generating the Access token 
-
-userSchema.methods.generateAccessToken = async function() {
-    const token = jwt.sign(
+// Token generation methods
+userSchema.methods.generateAccessToken = function() {
+    return jwt.sign(
         {
             _id: this._id,
             email: this.email,
             username: this.username,
-            role: this.role
+            role: this.role,
+            version: this.tokenVersion
         },
         process.env.ACCESS_TOKEN_SECRET,
-        {
-            expiresIn: process.env.ACCESS_TOKEN_EXPIRY
-        }
+        { expiresIn: process.env.ACCESS_TOKEN_EXPIRY }
     );
-    return token;
-}
-//generating the Refresh Token 
-userSchema.methods.generateRefreshToken = function(){
-    const token = jwt.sign(
+};
+
+userSchema.methods.generateRefreshToken = function() {
+    return jwt.sign(
         {
             _id: this._id,
-            
+            version: this.tokenVersion
         },
         process.env.REFRESH_TOKEN_SECRET,
-        {
-            expiresIn: process.env.REFRESH_TOKEN_EXPIRY
-        }
-    )
-    return token
-}
+        { expiresIn: process.env.REFRESH_TOKEN_EXPIRY }
+    );
+};
 
-/*
-How They Work Together:
-User logs in → Receives Access Token + Refresh Token.
-Access token is used for API calls.
-When the access token expires, the refresh token is sent to get a new one.
-A new access token is issued, and the cycle repeats.
-If the refresh token expires, the user must log in again.
+// Account lock methods
+userSchema.methods.incrementLoginAttempts = async function() {
+    this.loginAttempts += 1;
+    if (this.loginAttempts >= 5) {
+        this.lockUntil = new Date(Date.now() + 15 * 60 * 1000); // Lock for 15 minutes
+    }
+    await this.save();
+};
 
-Refresh Token :-it is Used to obtain a new access token when the current one expires.
-              :-Long-lived (days to weeks) to reduce frequent logins.
-              :-Stored securely in an HTTP-only cookie.
-              :-If stolen, it can be used to generate new access tokens, leading to prolonged unauthorized access.
-Access Token :-Short-lived (minutes to hours) to minimize damage if stolen.
-              :-Sent with every API request.
-              :-Stored in memory or local storage.
-              :-If stolen, it can only be used for a limited time.
-*/        
-export const User =mongoose.model("User",userSchema);   
+userSchema.methods.resetLoginAttempts = async function() {
+    this.loginAttempts = 0;
+    this.lockUntil = undefined;
+    await this.save();
+};
+
+userSchema.methods.isLocked = function() {
+    return this.lockUntil && this.lockUntil > Date.now();
+};
+
+export const User = mongoose.model("User", userSchema);   
 

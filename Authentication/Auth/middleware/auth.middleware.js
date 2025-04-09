@@ -1,38 +1,41 @@
-import ApiError from "../utils/apiError.js";
-import { asynchandler } from "../utils/asynchandler.js";
-import jwt from "jsonwebtoken";
-import { User } from "../model/user.model.js";
+import jwt from 'jsonwebtoken';
+import { asynchandler } from '../utils/asynchandler.js';
+import { ApiError } from '../utils/apiError.js';
+import { User } from '../model/user.model.js';
 
- export const verifyJWT=asynchandler(async(req, _,next)=>
- {
+export const verifyJWT = asynchandler(async (req, res, next) => {
     try {
-       const token = req.cookies?.accessToken ;
-       
-       console.log("Access Token:", token);
-   
-       if(!token)
-       {
-           throw new ApiError(401,"Unauthorized token")
-       }
-       const decoded = jwt.verify(token,process.env.ACCESS_TOKEN_SECRET)  // decode returns "payload " which is the one of the part of JWT (JSON Web Token) .
-   
-   
-  //     A  JWT (JSON Web Token) is usually composed of three parts:
-   
-          // Header: Contains metadata about the token, such as the signing algorithm.
-         // Payload: Contains the actual data (claims) encoded into the token, like the user ID, roles, expiration time, etc.
-        // Signature: Ensures the integrity of the token and verifies that it hasn't been tampered with.
-   
-   
-       const user =await User.findById(decoded?._id).select("-password -refreshToken")
-       if(!user)
-       {
-           throw new ApiError(401,"Unauthorized")
-       }
-       req.user=user
-   next()
- } 
- catch (error) {
-    throw new ApiError(400,"Invalid Access Token: " +error?.message);
- }
- })
+        // Skip authentication for health check endpoint
+        if (req.path === '/api/auth/health') {
+            return next();
+        }
+
+        // Get token from cookies or Authorization header
+        const token = req.cookies?.accessToken || 
+                     req.header("Authorization")?.replace("Bearer ", "");
+
+        if (!token) {
+            throw new ApiError(401, "Unauthorized request");
+        }
+
+        // Verify token
+        const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+
+        // Find user
+        const user = await User.findById(decodedToken?._id).select("-password -refreshToken");
+
+        if (!user) {
+            throw new ApiError(401, "Invalid Access Token");
+        }
+
+        // Attach user to request
+        req.user = user;
+        next();
+    } catch (error) {
+        // Allow health check to pass even with invalid token
+        if (req.path === '/api/auth/health') {
+            return next();
+        }
+        throw new ApiError(401, error?.message || "Invalid access token");
+    }
+});

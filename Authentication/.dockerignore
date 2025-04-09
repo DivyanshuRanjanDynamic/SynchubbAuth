@@ -1,56 +1,35 @@
 # Dependencies
 node_modules
 npm-debug.log
-yarn-debug.log
-yarn-error.log
+
+# Environment
+.env
+.env.local
+.env.*.local
 
 # Version control
 .git
 .gitignore
-.github
-.gitlab
 
-# Environment
-.env
-.env.*
-!.env.example
-
-# SSL certificates
-server/ssl/*
-!.dockerignore
-
-# Docker
-Dockerfile
-docker-compose*.yml
-.dockerignore
-
-# Documentation
-README.md
-CHANGELOG.md
-LICENSE
-*.md
-
-# IDE and editor files
-.idea
+# IDE
 .vscode
-*.swp
-*.swo
-.DS_Store
+.idea
 
 # Logs
 logs
 *.log
 
-# Test files
+# Test
 coverage
 .nyc_output
-test
-tests
-*.test.js
-*.spec.js
 
-# Build files
+# Build
 dist
 build
-*.min.js
-*.min.css 
+
+# Misc
+.DS_Store
+*.pem
+*.key
+*.cert
+README.md 

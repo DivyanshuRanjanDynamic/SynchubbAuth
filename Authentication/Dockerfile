@@ -1,43 +1,33 @@
 # Use Node.js LTS version
-FROM node:20-alpine
+FROM node:18-alpine
 
-# Create a non-root user
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Install curl for healthcheck
+RUN apk add --no-cache curl
 
-# Create app directory and set permissions
-WORKDIR /usr/src/app
-RUN chown -R appuser:appgroup /usr/src/app
+# Set working directory
+WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies (including dev dependencies for development)
-RUN npm install
+# Install production dependencies only
+RUN npm install --production --legacy-peer-deps
 
-# Copy source code
-COPY --chown=appuser:appgroup . .
+# Copy the rest of the application
+COPY . .
 
-# Create SSL directory and set permissions
-RUN mkdir -p server/ssl && \
-    chown -R appuser:appgroup server/ssl
+# Create necessary directories
+RUN mkdir -p Auth/utils Auth/models Auth/controllers Auth/middleware Auth/routes
 
-# Generate SSL certificates during build
-RUN apk add --no-cache openssl && \
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-    -keyout server/ssl/key.pem \
-    -out server/ssl/cert.pem \
-    -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost" && \
-    chown -R appuser:appgroup server/ssl
-
-# Switch to non-root user
-USER appuser
+# Create .env file from example if it doesn't exist
+RUN if [ ! -f .env ]; then cp .env.example .env; fi
 
 # Expose the port
 EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8000/api/auth/health || exit 1
+  CMD curl -f http://localhost:8000/health || exit 1
 
-# Start the application (default to development mode)
-CMD ["npm", "run", "dev"] 
+# Start the application
+CMD ["npm", "start"] 
