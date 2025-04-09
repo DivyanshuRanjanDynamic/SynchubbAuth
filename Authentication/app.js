@@ -7,6 +7,7 @@ import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { Strategy as GitHubStrategy } from 'passport-github2';
 import connectDB from './Auth/db/connectDB.js';
 import authRoutes from './Auth/routes/authRoutes.js';
+import mongoose from 'mongoose';
 
 // Constants
 export const DBNAME = 'AuthenticationSynchubbDb';
@@ -79,8 +80,41 @@ passport.deserializeUser((user, done) => {
 app.use("/auth", authRoutes);
 
 // Health check endpoint
-app.get("/health", (req, res) => {
-    res.status(200).json({ status: 'ok' });
+app.get("/health", async (req, res) => {
+    try {
+        // Check MongoDB connection
+        const mongoStatus = mongoose.connection.readyState === 1 ? 'healthy' : 'unhealthy';
+        
+        // Check if the application is responding
+        const appStatus = 'healthy';
+        
+        // Determine overall status
+        const overallStatus = mongoStatus === 'healthy' && appStatus === 'healthy' ? 'healthy' : 'unhealthy';
+        
+        // Set appropriate status code
+        const statusCode = overallStatus === 'healthy' ? 200 : 503;
+        
+        res.status(statusCode).json({
+            status: overallStatus,
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+            services: {
+                mongodb: {
+                    status: mongoStatus,
+                    connectionState: mongoose.connection.readyState
+                },
+                application: {
+                    status: appStatus
+                }
+            }
+        });
+    } catch (error) {
+        res.status(503).json({
+            status: 'unhealthy',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
 });
 
 export { app };

@@ -1,0 +1,125 @@
+class Polls {
+  constructor(room) {
+    this.room = room;
+    this.polls = new Map(); // Map of poll ID to poll object
+    this.maxPolls = 50; // Maximum number of polls to keep in history
+  }
+
+  createPoll(peerId, pollData) {
+    const pollId = `${peerId}-${Date.now()}`;
+    const poll = {
+      id: pollId,
+      createdBy: peerId,
+      question: pollData.question,
+      options: pollData.options.map(option => ({
+        id: `${pollId}-${option}-${Date.now()}`,
+        text: option,
+        votes: 0
+      })),
+      voters: new Set(),
+      isAnonymous: pollData.isAnonymous || false,
+      multipleChoice: pollData.multipleChoice || false,
+      createdAt: new Date().toISOString(),
+      status: 'active',
+      results: []
+    };
+
+    this.polls.set(pollId, poll);
+
+    // Maintain maximum polls limit
+    if (this.polls.size > this.maxPolls) {
+      const oldestPoll = Array.from(this.polls.keys())[0];
+      this.polls.delete(oldestPoll);
+    }
+
+    return poll;
+  }
+
+  vote(pollId, peerId, optionIds) {
+    const poll = this.polls.get(pollId);
+    if (!poll) {
+      throw new Error('Poll not found');
+    }
+
+    if (poll.status !== 'active') {
+      throw new Error('Poll is not active');
+    }
+
+    if (!poll.multipleChoice && optionIds.length > 1) {
+      throw new Error('This poll does not allow multiple choices');
+    }
+
+    if (poll.voters.has(peerId)) {
+      throw new Error('User has already voted');
+    }
+
+    // Record the vote(s)
+    optionIds.forEach(optionId => {
+      const option = poll.options.find(opt => opt.id === optionId);
+      if (option) {
+        option.votes++;
+      }
+    });
+
+    poll.voters.add(peerId);
+
+    // Update results
+    this.updateResults(poll);
+
+    return poll;
+  }
+
+  updateResults(poll) {
+    const totalVotes = poll.options.reduce((sum, option) => sum + option.votes, 0);
+    
+    poll.results = poll.options.map(option => ({
+      optionId: option.id,
+      text: option.text,
+      votes: option.votes,
+      percentage: totalVotes > 0 ? (option.votes / totalVotes) * 100 : 0
+    }));
+
+    return poll.results;
+  }
+
+  closePoll(pollId) {
+    const poll = this.polls.get(pollId);
+    if (!poll) {
+      throw new Error('Poll not found');
+    }
+
+    poll.status = 'closed';
+    poll.closedAt = new Date().toISOString();
+    return poll;
+  }
+
+  getPoll(pollId) {
+    const poll = this.polls.get(pollId);
+    if (!poll) {
+      throw new Error('Poll not found');
+    }
+    return poll;
+  }
+
+  getActivePolls() {
+    return Array.from(this.polls.values())
+      .filter(poll => poll.status === 'active');
+  }
+
+  getAllPolls() {
+    return Array.from(this.polls.values());
+  }
+
+  deletePoll(pollId) {
+    if (!this.polls.has(pollId)) {
+      throw new Error('Poll not found');
+    }
+    return this.polls.delete(pollId);
+  }
+
+  clear() {
+    this.polls.clear();
+  }
+}
+
+export default Polls;

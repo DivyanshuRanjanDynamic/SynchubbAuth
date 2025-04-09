@@ -21,7 +21,7 @@ class AppError extends Error {
         stack: err.stack
       });
     } else {
-      // Production mode
+      // Production error response
       if (err.isOperational) {
         res.status(err.statusCode).json({
           status: err.status,
@@ -38,4 +38,7 @@ class AppError extends Error {
     }
   };
   
-  export { AppError, errorHandler };
+  export  {
+    AppError,
+    errorHandler
+  };
