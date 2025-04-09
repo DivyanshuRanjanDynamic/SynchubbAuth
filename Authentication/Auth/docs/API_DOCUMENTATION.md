@@ -2,7 +2,7 @@
 
 ## Base URL
 ```
-https://localhost:8000/api/auth
+http://localhost:8000/api/auth
 ```
 
 ## Authentication
@@ -31,7 +31,8 @@ Request Body:
 {
     "username": "string",
     "email": "string",
-    "password": "string"
+    "password": "string",
+    "role": "string"
 }
 ```
 Response:
@@ -50,7 +51,7 @@ POST /login
 Request Body:
 ```json
 {
-    "email": "string",
+    "emailOrUsername": "string",
     "password": "string"
 }
 ```
@@ -111,7 +112,7 @@ POST /reset-password/:token
 Request Body:
 ```json
 {
-    "password": "string"
+    "newPassword": "string"
 }
 ```
 Response:
@@ -123,9 +124,63 @@ Response:
 }
 ```
 
+#### 6. Get Privacy Policy
+```http
+GET /privacy-policy
+```
+Response:
+```json
+{
+    "statusCode": 200,
+    "data": {
+        "content": "string"
+    },
+    "message": "Privacy policy retrieved successfully"
+}
+```
+
+#### 7. Google OAuth
+```http
+GET /google
+```
+Description: Initiates Google OAuth flow
+Response: Redirects to Google login page
+
+```http
+GET /google/callback
+```
+Description: Google OAuth callback
+Response: Redirects to frontend with token: `${CLIENT_URL}/auth/callback?token=<access_token>`
+
+#### 8. GitHub OAuth
+```http
+GET /github
+```
+Description: Initiates GitHub OAuth flow
+Response: Redirects to GitHub login page
+
+```http
+GET /github/callback
+```
+Description: GitHub OAuth callback
+Response: Redirects to frontend with token: `${CLIENT_URL}/auth/callback?token=<access_token>`
+
 ### Protected Routes
 
-#### 1. Get User Profile
+#### 1. Logout
+```http
+POST /logout
+```
+Response:
+```json
+{
+    "statusCode": 200,
+    "data": null,
+    "message": "Logged out successfully"
+}
+```
+
+#### 2. Get User Profile
 ```http
 GET /me
 ```
@@ -143,7 +198,7 @@ Response:
 }
 ```
 
-#### 2. Update Profile
+#### 3. Update Profile
 ```http
 PUT /profile
 ```
@@ -151,9 +206,7 @@ Request Body:
 ```json
 {
     "username": "string",
-    "email": "string",
-    "currentPassword": "string",
-    "newPassword": "string"
+    "email": "string"
 }
 ```
 Response:
@@ -172,31 +225,46 @@ Response:
 }
 ```
 
-#### 3. Change Password
+#### 4. Change Password
 ```http
 POST /change-password
 ```
 Request Body:
 ```json
 {
-    "previousPassword": "string",
-    "newPassword": "string",
-    "confirmPassword": "string"
+    "oldPassword": "string",
+    "newPassword": "string"
 }
 ```
 Response:
 ```json
 {
     "statusCode": 200,
-    "data": "Password Updated Successfully",
+    "data": null,
     "message": "Password changed successfully"
 }
 ```
 
-#### 4. Get Sessions
+#### 5. Refresh Token
+```http
+GET /refresh-token
+```
+Response:
+```json
+{
+    "statusCode": 200,
+    "data": {
+        "accessToken": "string"
+    },
+    "message": "Token refreshed successfully"
+}
+```
+
+#### 6. Get Sessions
 ```http
 GET /sessions
 ```
+Description: Requires 'user' or 'admin' role
 Response:
 ```json
 {
@@ -216,10 +284,11 @@ Response:
 }
 ```
 
-#### 5. Revoke Session
+#### 7. Revoke Session
 ```http
 DELETE /sessions/:sessionId
 ```
+Description: Requires 'user' or 'admin' role
 Response:
 ```json
 {
@@ -229,10 +298,11 @@ Response:
 }
 ```
 
-#### 6. Revoke All Sessions
+#### 8. Revoke All Sessions
 ```http
 DELETE /sessions
 ```
+Description: Requires 'user' or 'admin' role
 Response:
 ```json
 {
@@ -242,15 +312,9 @@ Response:
 }
 ```
 
-#### 7. Delete Account
+#### 9. Delete Account
 ```http
 DELETE /account
-```
-Request Body:
-```json
-{
-    "password": "string"
-}
 ```
 Response:
 ```json
@@ -261,28 +325,70 @@ Response:
 }
 ```
 
-## Error Responses
-
-All error responses follow this format:
+#### 10. Home
+```http
+GET /home
+```
+Response:
 ```json
 {
-    "statusCode": number,
-    "message": "string",
-    "errors": [
-        {
-            "field": "string",
-            "message": "string"
-        }
-    ]
+    "message": "Welcome to the home page",
+    "user": {
+        "id": "string",
+        "username": "string",
+        "email": "string",
+        "role": "string"
+    }
 }
 ```
 
-Common error codes:
-- 400: Bad Request
-- 401: Unauthorized
-- 403: Forbidden
-- 404: Not Found
-- 409: Conflict
-- 423: Locked
-- 429: Too Many Requests
-- 500: Internal Server Error 
+## Error Responses
+All endpoints may return the following error responses:
+
+```json
+{
+    "statusCode": 400,
+    "error": "Bad Request",
+    "message": "Error message description"
+}
+```
+
+```json
+{
+    "statusCode": 401,
+    "error": "Unauthorized",
+    "message": "Invalid or expired token"
+}
+```
+
+```json
+{
+    "statusCode": 403,
+    "error": "Forbidden",
+    "message": "Insufficient permissions"
+}
+```
+
+```json
+{
+    "statusCode": 404,
+    "error": "Not Found",
+    "message": "Resource not found"
+}
+```
+
+```json
+{
+    "statusCode": 429,
+    "error": "Too Many Requests",
+    "message": "Rate limit exceeded"
+}
+```
+
+```json
+{
+    "statusCode": 500,
+    "error": "Internal Server Error",
+    "message": "Something went wrong"
+}
+``` 
