@@ -1,5 +1,4 @@
 import mongoose from "mongoose"
-import { DBNAME } from "../../constant.js";
 import { cacheService } from '../services/cache.js';
 
 
@@ -18,7 +17,7 @@ export const connectDB = async () =>{
             retryReads: true
         };
 
-        console.log(`MongoDB URI: ${process.env.MONGO_URI}/${DBNAME}`);
+        console.log(`MongoDB URI: ${process.env.MONGO_URI}`);
         const connection = await mongoose.connect(process.env.MONGO_URI, options);
         
         // Set up connection event listeners

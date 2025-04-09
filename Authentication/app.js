@@ -6,8 +6,15 @@ import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { Strategy as GitHubStrategy } from 'passport-github2';
 import connectDB from './Auth/db/connectDB.js';
-import authRoutes from './Auth/routes/authRoutes.js';
+import authRoutes from './Auth/routes/auth.route.js';
 import mongoose from 'mongoose';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Load environment variables
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 // Constants
 export const DBNAME = 'AuthenticationSynchubbDb';
