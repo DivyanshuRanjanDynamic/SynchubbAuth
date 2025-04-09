@@ -48,22 +48,49 @@ export const helmetConfig = helmet({
 
 // Redis client for caching and rate limiting
 export const redisClient = createClient({
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
+    url: process.env.REDIS_URL,
+    password: process.env.REDIS_PASSWORD,
+    database: parseInt(process.env.REDIS_DB || '0'),
     socket: {
-        reconnectStrategy: (retries) => Math.min(retries * 50, 1000)
+        reconnectStrategy: (retries) => Math.min(retries * 50, 1000),
+        tls: process.env.NODE_ENV === 'production',
+        rejectUnauthorized: false
     }
 });
 
-redisClient.on('error', (err) => console.error('Redis Client Error', err));
-redisClient.on('connect', () => console.log('Redis Client Connected'));
+redisClient.on('error', (err) => {
+    console.error('Redis Client Error:', err);
+    // Implement retry logic or fallback mechanism here
+});
+
+redisClient.on('connect', () => {
+    console.log('Redis Client Connected');
+    // Implement any post-connection setup here
+});
+
+redisClient.on('ready', () => {
+    console.log('Redis Client Ready');
+});
+
+redisClient.on('end', () => {
+    console.log('Redis Client Connection Ended');
+});
 
 // Initialize Redis connection
 export const initializeRedis = async () => {
     try {
         await redisClient.connect();
         console.log('Redis connection established');
+        
+        // Test the connection
+        const ping = await redisClient.ping();
+        if (ping !== 'PONG') {
+            throw new Error('Redis connection test failed');
+        }
     } catch (error) {
         console.error('Redis connection failed:', error);
+        // Implement fallback mechanism or retry logic here
+        throw error;
     }
 };
 

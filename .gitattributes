@@ -1,0 +1,59 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Documents
+*.md text diff=markdown
+*.txt text
+*.json text
+*.yml text
+*.yaml text
+*.js text
+*.jsx text
+*.ts text
+*.tsx text
+*.html text
+*.css text
+*.scss text
+*.env text
+*.env.example text
+
+# Binary files
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.mov binary
+*.mp4 binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.rar binary
+*.7z binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.class binary
+*.jar binary
+*.war binary
+*.ear binary
+*.zip binary
+*.tar.gz binary
+*.tgz binary
+*.tar.bz2 binary
+*.tbz2 binary
+*.tar.xz binary
+*.txz binary
+*.tar.lz binary
+*.tlz binary
+*.tar.lzma binary
+*.tlzma binary
+*.tar.lzo binary
+*.tzo binary
+*.tar.lrz binary
+*.tlrz binary
+*.tar.lz4 binary
+*.tlz4 binary
+*.tar.zst binary
+*.tzst binary 
