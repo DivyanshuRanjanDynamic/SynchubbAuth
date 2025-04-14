@@ -5,8 +5,15 @@ import { logger } from '../utils/logger.js';
 
 // Create Redis client
 const redisClient = createClient({
-    url: process.env.REDIS_URL ,
-    legacyMode: true
+    url: process.env.REDIS_URL,
+    password: process.env.REDIS_PASSWORD,
+    database: parseInt(process.env.REDIS_DB || '0'),
+    legacyMode: true,
+    socket: {
+        // Only use TLS in production, not in local development
+        tls: process.env.NODE_ENV === 'production',
+        rejectUnauthorized: false
+    }
 });
 
 redisClient.on('error', (err) => {

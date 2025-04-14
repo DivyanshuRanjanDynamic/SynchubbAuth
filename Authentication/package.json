@@ -4,9 +4,8 @@
   "description": "Authentication API",
   "main": "Auth/handleServerAndDatabase.js",
   "scripts": {
-    "dev": "nodemon Auth/handleServerAndDatabase.js",
     "start": "node Auth/handleServerAndDatabase.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon Auth/handleServerAndDatabase.js"
   },
   "keywords": [
     "auth",

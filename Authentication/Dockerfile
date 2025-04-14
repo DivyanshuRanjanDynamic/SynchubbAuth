@@ -10,8 +10,9 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install production dependencies only
-RUN npm install --production --legacy-peer-deps
+# Install dependencies based on NODE_ENV
+ARG NODE_ENV=production
+RUN if [ "$NODE_ENV" = "development" ] ; then npm install --legacy-peer-deps ; else npm install --production --legacy-peer-deps ; fi
 
 # Copy the rest of the application
 COPY . .
@@ -29,5 +30,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s \
   CMD curl -f http://localhost:8000/health || exit 1
 
-# Start the application
-CMD ["npm", "start"] 
+# Start the application based on NODE_ENV
+CMD if [ "$NODE_ENV" = "development" ] ; then npm run dev ; else npm start ; fi 

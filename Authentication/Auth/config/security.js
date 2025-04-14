@@ -56,7 +56,8 @@ export const redisClient = createClient({
             console.log(`Redis reconnection attempt ${retries}`);
             return Math.min(retries * 50, 1000);
         },
-        tls: true,
+        // Only use TLS in production, not in local development
+        tls: process.env.NODE_ENV === 'production',
         rejectUnauthorized: false
     }
 });

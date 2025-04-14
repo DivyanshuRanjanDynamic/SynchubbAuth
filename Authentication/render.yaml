@@ -23,6 +23,16 @@ services:
       - key: GITHUB_CLIENT_SECRET
         sync: false
       - key: REDIS_URL
-        sync: false
+        fromService:
+          name: auth-redis
+          type: redis
+          property: connectionString
+      - key: REDIS_PASSWORD
+        fromService:
+          name: auth-redis
+          type: redis
+          property: password
+      - key: REDIS_DB
+        value: 0
     healthCheckPath: /health
     autoDeploy: true 
