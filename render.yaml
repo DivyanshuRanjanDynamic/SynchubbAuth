@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: content-service
+    env: docker
+    plan: free
+    dockerfilePath: ./ContentSharing/Dockerfile
+    dockerCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8001
+      - key: MONGO_URI
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          name: content-redis
+          type: redis
+          property: connectionString
+      - key: REDIS_PASSWORD
+        fromService:
+          name: content-redis
+          type: redis
+          property: password
+      - key: REDIS_DB
+        value: 0
+      - key: ACCESS_TOKEN_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        sync: false
+      - key: AWS_S3_BUCKET
+        sync: false
+    healthCheckPath: /health
+    autoDeploy: true
+
+  - type: redis
+    name: content-redis
+    ipAllowList: []
+    plan: free 
