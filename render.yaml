@@ -17,11 +17,16 @@ services:
           name: content-redis
           type: redis
           property: connectionString
-      - key: REDIS_PASSWORD
+      - key: REDIS_HOST
         fromService:
           name: content-redis
           type: redis
-          property: password
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          name: content-redis
+          type: redis
+          property: port
       - key: REDIS_DB
         value: 0
       - key: ACCESS_TOKEN_SECRET

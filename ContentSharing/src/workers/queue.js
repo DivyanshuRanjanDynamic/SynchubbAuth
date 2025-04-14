@@ -1,61 +1,57 @@
 import Queue from 'bull';
 import { logger } from '../utils/logger.js';
 
-// Parse Redis URL to get connection details
+// Get Redis connection details from environment variables
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-const REDIS_PASSWORD = process.env.REDIS_PASSWORD || '';
-
-// Extract host and port from URL
-const redisUrl = new URL(REDIS_URL);
-const redisHost = redisUrl.hostname;
-const redisPort = redisUrl.port || 6379;
+const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
+const REDIS_PORT = process.env.REDIS_PORT || 6379;
+const REDIS_DB = process.env.REDIS_DB || 0;
 
 // Create queues
 export const contentQueue = new Queue('content-processing', {
     redis: {
         url: REDIS_URL,
-        password: REDIS_PASSWORD
-    }
-});
-
-// Process content queue
-contentQueue.process('process-content', async (job) => {
-    try {
-        const { contentId, type } = job.data;
-        logger.info(`Processing content ${contentId} of type ${type}`);
-        
-        // Add your content processing logic here
-        // For example: generate thumbnails, process video, etc.
-        
-        logger.info(`Content ${contentId} processed successfully`);
-    } catch (error) {
-        logger.error('Error processing content:', error);
-        throw error;
+        host: REDIS_HOST,
+        port: REDIS_PORT,
+        db: REDIS_DB
     }
 });
 
 // Initialize queues
 export const initializeQueues = async () => {
     try {
-        // Clear existing jobs
-        await contentQueue.empty();
-        
-        // Add queue event handlers
+        // Add event listeners
         contentQueue.on('completed', (job) => {
             logger.info(`Job ${job.id} completed`);
         });
 
-        contentQueue.on('failed', (job, error) => {
-            logger.error(`Job ${job.id} failed:`, error);
+        contentQueue.on('failed', (job, err) => {
+            logger.error(`Job ${job.id} failed:`, err);
         });
 
-        contentQueue.on('error', (error) => {
-            logger.error('Content queue error:', error);
+        // Process content
+        contentQueue.process('process-content', async (job) => {
+            const { contentId, type } = job.data;
+            logger.info(`Processing content ${contentId} of type ${type}`);
+            
+            // Add your content processing logic here
+            
+            return { success: true };
         });
 
-        return true;
+        // Process sharing
+        contentQueue.process('share-content', async (job) => {
+            const { contentId, platform, userId } = job.data;
+            logger.info(`Sharing content ${contentId} on ${platform} by user ${userId}`);
+            
+            // Add your sharing logic here
+            
+            return { success: true };
+        });
+
+        logger.info('Queues initialized successfully');
     } catch (error) {
         logger.error('Failed to initialize queues:', error);
-        return false;
+        throw error;
     }
 }; 
