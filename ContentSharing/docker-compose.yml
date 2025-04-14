@@ -17,7 +17,7 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=8001
-      - MONGO_URI=mongodb://content-mongodb:27017/contentDB
+      - MONGO_URI=mongodb+srv://synchubb:j6LgHXgF8j3hgPlv@cluster0.6su60.mongodb.net/HubDb
       - REDIS_URL=redis://:9955823240@content-redis:6379
       - REDIS_PASSWORD=9955823240
       - REDIS_DB=0
