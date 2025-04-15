@@ -22,6 +22,7 @@ import { validateLogin, validateRegister, validateRequest } from '../middleware/
 import { checkRole } from '../middleware/rbac.js';
 import { securityHeaders } from '../middleware/securityHeaders.js';
 import passport from "passport";
+import {User} from "../model/user.model.js";
 
 const router = express.Router();
 
@@ -44,13 +45,23 @@ router.get("/google",
 );
 router.get("/google/callback",
     passport.authenticate("google", {
-        failureRedirect: "/login",
+        failureRedirect: `${process.env.CLIENT_URL}/login?error=google_auth_failed`,
         session: false
     }),
-    (req, res) => {
-        // Generate tokens and redirect with them
-        const token = req.user.generateAccessToken();
-        res.redirect(`${process.env.CLIENT_URL}/auth/callback?token=${token}`);
+    async (req, res) => {
+        try {
+            const user = await User.findOrCreateOAuthUser(req.user, 'google');
+            const token = user.generateAccessToken();
+            
+            // Update last login
+            user.lastLogin = new Date();
+            await user.save();
+
+            res.redirect(`${process.env.CLIENT_URL}/auth/callback?token=${token}`);
+        } catch (error) {
+            console.error('OAuth callback error:', error);
+            res.redirect(`${process.env.CLIENT_URL}/login?error=oauth_error`);
+        }
     }
 );
 router.get("/github",
@@ -60,13 +71,23 @@ router.get("/github",
 );
 router.get("/github/callback",
     passport.authenticate("github", {
-        failureRedirect: "/login",
+        failureRedirect: `${process.env.CLIENT_URL}/login?error=github_auth_failed`,
         session: false
     }),
-    (req, res) => {
-        // Generate tokens and redirect with them
-        const token = req.user.generateAccessToken();
-        res.redirect(`${process.env.CLIENT_URL}/auth/callback?token=${token}`);
+    async (req, res) => {
+        try {
+            const user = await User.findOrCreateOAuthUser(req.user, 'github');
+            const token = user.generateAccessToken();
+            
+            // Update last login
+            user.lastLogin = new Date();
+            await user.save();
+
+            res.redirect(`${process.env.CLIENT_URL}/auth/callback?token=${token}`);
+        } catch (error) {
+            console.error('OAuth callback error:', error);
+            res.redirect(`${process.env.CLIENT_URL}/login?error=oauth_error`);
+        }
     }
 );
 // Protected Routes (require authentication)

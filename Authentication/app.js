@@ -27,10 +27,11 @@ app.use(express.urlencoded({ extended: true }));
 
 // CORS configuration
 const corsOptions = {
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: ['https://www.synchubb.in', 'https://synchubb.in'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['set-cookie']
 };
 app.use(cors(corsOptions));
 
@@ -44,8 +45,9 @@ app.use(
             secure: process.env.NODE_ENV === 'production',
             maxAge: 24 * 60 * 60 * 1000, // 24 hours
             sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-            domain: process.env.NODE_ENV === 'production' ? '.vercel.app' : undefined
+            domain: process.env.NODE_ENV === 'production' ? 'synchubb.in' : undefined
         },
+        name: 'synchubb.sid'
     })
 );
 
@@ -59,11 +61,15 @@ passport.use(
         {
             clientID: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            callbackURL: '/auth/google/callback',
+            callbackURL: 'https://auth-service-ihpj.onrender.com/auth/google/callback',
         },
         async (accessToken, refreshToken, profile, done) => {
-            // Handle Google authentication
-            return done(null, profile);
+            try {
+                // Find or create user logic will be implemented in auth controller
+                return done(null, profile);
+            } catch (error) {
+                return done(error, null);
+            }
         }
     )
 );
@@ -73,11 +79,15 @@ passport.use(
         {
             clientID: process.env.GITHUB_CLIENT_ID,
             clientSecret: process.env.GITHUB_CLIENT_SECRET,
-            callbackURL: '/auth/github/callback',
+            callbackURL: 'https://auth-service-ihpj.onrender.com/auth/github/callback',
         },
         async (accessToken, refreshToken, profile, done) => {
-            // Handle GitHub authentication
-            return done(null, profile);
+            try {
+                // Find or create user logic will be implemented in auth controller
+                return done(null, profile);
+            } catch (error) {
+                return done(error, null);
+            }
         }
     )
 );
