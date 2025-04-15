@@ -1,10 +1,8 @@
 services:
-  # Content Sharing Service
   - type: web
     name: content-sharing-service
     env: docker
-    dockerfilePath: ./ContentSharing/Dockerfile
-    dockerContext: ./ContentSharing
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: NODE_ENV
         value: production
@@ -35,7 +33,6 @@ services:
     healthCheckPath: /api/v1/health
     autoDeploy: true
 
-  # MongoDB for Content Sharing
   - type: pserv
     name: content-mongodb
     env: docker
@@ -48,10 +45,8 @@ services:
     scaling:
       minInstances: 1
       maxInstances: 1
-    dockerfilePath: ./ContentSharing/docker/mongodb.Dockerfile
-    dockerContext: ./ContentSharing
+    dockerfilePath: ./docker/mongodb.Dockerfile
 
-  # Redis for Content Sharing
   - type: redis
     name: content-redis
     ipAllowList: []
