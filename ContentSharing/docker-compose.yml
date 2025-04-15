@@ -2,78 +2,58 @@ version: '3.8'
 
 services:
   content-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - NODE_ENV=development
+    build: .
     container_name: content-service
+    restart: unless-stopped
     ports:
       - "8001:8001"
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - content_uploads:/app/uploads
     environment:
       - NODE_ENV=development
       - PORT=8001
-      - MONGO_URI=mongodb+srv://synchubb:j6LgHXgF8j3hgPlv@cluster0.6su60.mongodb.net/HubDb
-      - REDIS_URL=redis://:9955823240@content-redis:6379
-      - REDIS_PASSWORD=9955823240
-      - REDIS_DB=0
-      - ACCESS_TOKEN_SECRET=${ACCESS_TOKEN_SECRET}
-      - CLOUDINARY_CLOUD_NAME=db4foxzmg
-      - CLOUDINARY_API_KEY=262849172659543
-      - CLOUDINARY_API_SECRET=MKXBFXOcYVd704-NYNWuGXLitOQ
+      - MONGO_URI=mongodb://content-mongodb:27017/contentDB
+      - REDIS_URL=redis://:devpassword@content-redis:6379
+      - REDIS_PASSWORD=devpassword
+      - ACCESS_TOKEN_SECRET=devsecret
+      - ACCESS_TOKEN_EXPIRY=1hr
+      - CLOUDINARY_CLOUD_NAME=devcloud
+      - CLOUDINARY_API_KEY=devkey
+      - CLOUDINARY_API_SECRET=devsecret
+      - CLIENT_URL=http://localhost:3000
+    volumes:
+      - ./uploads:/app/uploads
     depends_on:
-      content-mongodb:
-        condition: service_healthy
-      content-redis:
-        condition: service_healthy
+      - content-mongodb
+      - content-redis
     networks:
       - content-network
-    restart: unless-stopped
 
   content-mongodb:
     image: mongo:latest
     container_name: content-mongodb
+    restart: unless-stopped
     ports:
       - "27018:27017"
     volumes:
-      - content_mongodb_data:/data/db
+      - content-mongodb-data:/data/db
     networks:
       - content-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   content-redis:
     image: redis:alpine
     container_name: content-redis
+    restart: unless-stopped
     ports:
-      - "6380:6379"
-    command: redis-server --requirepass 9955823240
+      - "6379:6379"
+    command: redis-server --requirepass devpassword
     volumes:
-      - content_redis_data:/data
+      - content-redis-data:/data
     networks:
       - content-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "9955823240", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
 
 networks:
   content-network:
     driver: bridge
 
 volumes:
-  content_mongodb_data:
-  content_redis_data:
-  content_uploads: 
+  content-mongodb-data:
+  content-redis-data: 

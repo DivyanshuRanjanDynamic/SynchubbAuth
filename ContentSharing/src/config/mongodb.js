@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { logger } from '../utils/logger.js';
 
-const MONGODB_URI = process.env.MONGO_URI || 'mongodb://content-mongodb:27017/contentDB';
+const MONGODB_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/contentDB';
 
 // Handle connection events
 mongoose.connection.on('error', (err) => {

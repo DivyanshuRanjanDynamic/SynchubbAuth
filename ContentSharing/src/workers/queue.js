@@ -5,6 +5,7 @@ import { logger } from '../utils/logger.js';
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
 const REDIS_PORT = process.env.REDIS_PORT || 6379;
+const REDIS_PASSWORD = process.env.REDIS_PASSWORD || '';
 const REDIS_DB = process.env.REDIS_DB || 0;
 
 // Create queues
@@ -13,6 +14,7 @@ export const contentQueue = new Queue('content-processing', {
         url: REDIS_URL,
         host: REDIS_HOST,
         port: REDIS_PORT,
+        password: REDIS_PASSWORD,
         db: REDIS_DB
     }
 });

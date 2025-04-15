@@ -45,13 +45,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint (before rate limiter)
-app.get('/health', (req, res) => {
+app.get('/api/v1/health', (req, res) => {
   res.status(200).json({ status: 'healthy' });
 });
 
 // Apply rate limiter to all routes except health check
 app.use((req, res, next) => {
-  if (req.path === '/health') {
+  if (req.path === '/api/v1/health') {
     return next();
   }
   rateLimiter(req, res, next);

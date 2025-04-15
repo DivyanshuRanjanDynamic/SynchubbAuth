@@ -1,58 +1,59 @@
 services:
+  # Content Sharing Service
   - type: web
-    name: content-service
+    name: content-sharing-service
     env: docker
-    plan: free
     dockerfilePath: ./ContentSharing/Dockerfile
-    dockerCommand: npm start
+    dockerContext: ./ContentSharing
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 8001
       - key: MONGO_URI
-        sync: false
+        fromService:
+          name: content-mongodb
+          type: pserv
+          property: connectionString
       - key: REDIS_URL
         fromService:
           name: content-redis
           type: redis
           property: connectionString
-      - key: REDIS_HOST
-        fromService:
-          name: content-redis
-          type: redis
-          property: host
-      - key: REDIS_PORT
-        fromService:
-          name: content-redis
-          type: redis
-          property: port
-      - key: REDIS_DB
-        value: 0
       - key: ACCESS_TOKEN_SECRET
         sync: false
+      - key: ACCESS_TOKEN_EXPIRY
+        value: 1hr
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-      - key: REDIS_URL
-        fromService:
-          name: auth-redis
-          type: redis
-          property: connectionString
-      - key: REDIS_PASSWORD
-        fromService:
-          name: auth-redis
-          type: redis
-          property: password
-      - key: REDIS_DB
-        value: 0
-    healthCheckPath: /health
+      - key: CLIENT_URL
+        value: https://your-frontend-url.com
+    healthCheckPath: /api/v1/health
     autoDeploy: true
 
+  # MongoDB for Content Sharing
+  - type: pserv
+    name: content-mongodb
+    env: docker
+    region: oregon
+    plan: free
+    disk:
+      name: data
+      mountPath: /data/db
+      sizeGB: 1
+    scaling:
+      minInstances: 1
+      maxInstances: 1
+    dockerfilePath: ./ContentSharing/docker/mongodb.Dockerfile
+    dockerContext: ./ContentSharing
+
+  # Redis for Content Sharing
   - type: redis
     name: content-redis
     ipAllowList: []
-    plan: free 
+    plan: free
+    maxmemoryPolicy: noeviction 
