@@ -24,7 +24,15 @@ const app = express();
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors());
+
+// CORS configuration
+const corsOptions = {
+  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+app.use(cors(corsOptions));
 
 // Session configuration
 app.use(
@@ -35,6 +43,8 @@ app.use(
         cookie: {
             secure: process.env.NODE_ENV === 'production',
             maxAge: 24 * 60 * 60 * 1000, // 24 hours
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+            domain: process.env.NODE_ENV === 'production' ? '.vercel.app' : undefined
         },
     })
 );
