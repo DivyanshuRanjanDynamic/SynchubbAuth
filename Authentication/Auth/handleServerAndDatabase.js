@@ -15,12 +15,20 @@ import {
     compressionMiddleware 
 } from './config/security.js';
 
-// Configure environment variables
-dotenv.config({ path: "./.env" });
-
 // Convert ES module URL to path
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Configure environment variables with absolute path
+const envPath = path.resolve(__dirname, '../../.env ');
+dotenv.config({ path: envPath });
+
+// Log environment variables for debugging
+console.log('Environment Variables:', {
+    EMAIL_USER: process.env.EMAIL_USERNAME,
+    hasEmailPassword: !!process.env.EMAIL_PASSWORD,
+    NODE_ENV: process.env.NODE_ENV
+});
 
 // SSL Path inside Auth Service
 const sslDir = path.join(__dirname,'server', 'ssl');
@@ -139,18 +147,32 @@ const startServer = async () => {
 
         const httpsServer = https.createServer(options, app);
         
-        const port = process.env.PORT || 7000;
-        await httpsServer.listen(port);
-        console.log(`Server running on port ${port}`);
+        const port = process.env.PORT || 8000;
+        
+        // Try to start the server
+        try {
+            await httpsServer.listen(port);
+            console.log(`Server running on port ${port}`);
+        } catch (error) {
+            if (error.code === 'EADDRINUSE') {
+                console.error(`Port ${port} is already in use. Trying port ${port + 1}`);
+                await httpsServer.listen(port + 1);
+                console.log(`Server running on port ${port + 1}`);
+            } else {
+                throw error;
+            }
+        }
 
         // Error handling
         httpsServer.on('error', (error) => {
             console.error('Server error:', error);
-            throw error;
+            if (error.code !== 'EADDRINUSE') {
+                throw error;
+            }
         });
     } catch(error) {
         console.error('Server startup failed:', error);
-        throw error;
+        process.exit(1);
     }
 }
 

@@ -3,6 +3,13 @@ import { TokenBlacklist } from '../model/tokenBlacklist.model.js';
 
 export class TokenManager {
     static async generateTokens(user) {
+        console.log('Token secrets:', {
+            hasAccessTokenSecret: !!process.env.ACCESS_TOKEN_SECRET,
+            hasRefreshTokenSecret: !!process.env.REFRESH_TOKEN_SECRET,
+            accessTokenExpiry: process.env.ACCESS_TOKEN_EXPIRY,
+            refreshTokenExpiry: process.env.REFRESH_TOKEN_EXPIRY
+        });
+
         const accessToken = jwt.sign(
             {
                 _id: user._id,
@@ -35,13 +42,21 @@ export class TokenManager {
         }
     }
 
-    static async blacklistToken(token) {
+    static async blacklistToken(token, reason = 'LOGOUT') {
         const decoded = jwt.decode(token);
         if (!decoded) return;
 
+        // Check if token is already blacklisted
+        const existingBlacklist = await TokenBlacklist.findOne({ token });
+        if (existingBlacklist) {
+            console.log('Token already blacklisted');
+            return;
+        }
+
         const blacklistEntry = new TokenBlacklist({
             token,
-            expiresAt: new Date(decoded.exp * 1000)
+            expiresAt: new Date(decoded.exp * 1000),
+            reason
         });
 
         await blacklistEntry.save();

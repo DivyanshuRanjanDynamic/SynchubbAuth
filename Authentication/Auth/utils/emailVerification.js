@@ -1,68 +1,69 @@
-import crypto from 'crypto';
 import { User } from '../model/user.model.js';
 import { emailService } from './emailService.js';
+import { ApiError } from '../utils/apiError.js';
+import jwt from 'jsonwebtoken';
 
- class EmailVerificationManager {
+class EmailVerificationManager {
     static async generateVerificationToken(user) {
-        // Generate verification token
-        const verificationToken = crypto.randomBytes(32).toString('hex');
-        
-        // Hash token and set to user
-        user.emailVerificationToken = crypto
-            .createHash('sha256')
-            .update(verificationToken)
-            .digest('hex');
-        
-        // Set expiry (24 hours)
-        user.emailVerificationExpireAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        
-        await user.save();
-        
-        return verificationToken;
+        try {
+            // Generate access token for email verification
+            const accessToken = user.generateAccessToken();
+            
+            // Send verification email with the access token
+            await this.sendVerificationEmail(user, accessToken);
+            
+            return accessToken;
+        } catch (error) {
+            console.error('Error generating verification token:', error);
+            throw new ApiError(500, 'Failed to generate verification token');
+        }
     }
 
-    static async sendVerificationEmail(user, verificationToken) {
-        const verificationUrl = `${process.env.CLIENT_URL}/verify-email/${verificationToken}`;
-        
-        const message = `
-            <h1>Email Verification</h1>
-            <p>Please verify your email address by clicking the link below:</p>
-            <a href="${verificationUrl}" target="_blank">Verify Email</a>
-            <p>This link will expire in 24 hours.</p>
-            <p>If you didn't create an account, please ignore this email.</p>
-        `;
+    static async sendVerificationEmail(user, accessToken) {
+        try {
+            if (!user || !accessToken) {
+                throw new ApiError(400, 'User and access token are required');
+            }
 
-        await emailService.sendEmail({
-            email: user.email,
-            subject: 'Email Verification',
-            html: message
-        });
+            const verificationUrl = `${process.env.CLIENT_URL}/verify-email?token=${accessToken}`;
+            await emailService.sendVerificationEmail(user, verificationUrl);
+        } catch (error) {
+            console.error('Error sending verification email:', error);
+            throw new ApiError(500, 'Failed to send verification email');
+        }
     }
 
     static async verifyEmail(token) {
-        // Hash the token
-        const hashedToken = crypto
-            .createHash('sha256')
-            .update(token)
-            .digest('hex');
+        try {
+            if (!token) {
+                throw new ApiError(400, 'Access token is required');
+            }
 
-        // Find user with token
-        const user = await User.findOne({
-            emailVerificationToken: hashedToken,
-            emailVerificationExpireAt: { $gt: Date.now() }
-        });
+            // Verify the access token
+            const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+            
+            // Find user by ID from token
+            const user = await User.findById(decoded._id);
+            if (!user) {
+                throw new ApiError(400, 'User not found');
+            }
 
-        if (!user) {
-            throw new Error('Invalid or expired verification token');
+            // Update user verification status
+            user.isVerified = true;
+            await user.save();
+            
+            console.log('Email verified for user:', user.email);
+        } catch (error) {
+            console.error('Email verification error:', error);
+            if (error.name === 'JsonWebTokenError') {
+                throw new ApiError(400, 'Invalid access token');
+            }
+            if (error.name === 'TokenExpiredError') {
+                throw new ApiError(400, 'Access token has expired');
+            }
+            throw error;
         }
-
-        // Update user verification status
-        user.isVerified = true;
-        user.emailVerificationToken = undefined;
-        user.emailVerificationExpireAt = undefined;
-        
-        await user.save();
     }
-} 
+}
 
-export {EmailVerificationManager};
+export { EmailVerificationManager };

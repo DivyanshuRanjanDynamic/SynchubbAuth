@@ -4,8 +4,8 @@
   "description": "Authentication API",
   "main": "Auth/handleServerAndDatabase.js",
   "scripts": {
-    "start": "node Auth/handleServerAndDatabase.js",
-    "dev": "nodemon Auth/handleServerAndDatabase.js"
+    "start": "node --experimental-specifier-resolution=node Auth/handleServerAndDatabase.js",
+    "dev": "nodemon --experimental-specifier-resolution=node Auth/handleServerAndDatabase.js"
   },
   "keywords": [
     "auth",
@@ -22,7 +22,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
-    "dotenv": "^16.4.7",
+    "dotenv": "^16.5.0",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "express-session": "^1.18.1",

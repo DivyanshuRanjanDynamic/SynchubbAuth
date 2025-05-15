@@ -3,10 +3,10 @@ import {
     registerUser,
     loginUser,
     logoutUser,
-    resetPasswordWithToken,
+    resetPassword,
     changePassword,
     verifyEmail,
-    requestPasswordReset,
+    forgotPassword,
     refreshAccessToken,
     getUserProfile,
     updateUserProfile,
@@ -18,11 +18,19 @@ import {
 } from "../controllers/auth.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { loginLimiter, apiLimiter } from '../middleware/rateLimiter.js';
-import { validateLogin, validateRegister, validateRequest } from '../middleware/validator.js';
+import { 
+    validateLogin, 
+    validateRegister, 
+    validateRequest,
+    validatePasswordReset,
+    validateNewPassword,
+    validateProfileUpdate,
+    validateAccountDeletion 
+} from '../middleware/validator.js';
 import { checkRole } from '../middleware/rbac.js';
 import { securityHeaders } from '../middleware/securityHeaders.js';
 import passport from "passport";
-import {User} from "../model/user.model.js";
+import { User } from "../model/user.model.js";
 
 const router = express.Router();
 
@@ -30,26 +38,63 @@ const router = express.Router();
 router.use(securityHeaders);
 
 // Public Routes
-router.post("/register", apiLimiter, validateRegister, validateRequest, registerUser);
-router.post("/login",loginLimiter, validateLogin, validateRequest,loginUser);
-router.get("/verify-email/:token",apiLimiter,verifyEmail);
-router.post("/forgot-password",apiLimiter,requestPasswordReset);
-router.post("/reset-password/:token",apiLimiter,resetPasswordWithToken);
-router.get("/privacy-policy",privacypolicy);
+router.post("/register", 
+    apiLimiter, 
+    validateRegister, 
+    validateRequest, 
+    registerUser
+);
+
+router.post("/login",
+    loginLimiter, 
+    validateLogin, 
+    validateRequest,
+    loginUser
+);
+
+router.get("/verify-email/:token",
+    apiLimiter,
+    verifyEmail
+);
+
+router.post("/forgot-password",
+    apiLimiter,
+    validatePasswordReset,
+    validateRequest,
+    forgotPassword
+);
+
+router.post("/reset-password/:token",
+    apiLimiter,
+    validateNewPassword,
+    validateRequest,
+    resetPassword
+);
+
+router.get("/privacy-policy", privacypolicy);
+
 // Social Authentication Routes
 router.get("/google",
-    passport.authenticate("google", { 
-        scope: ["profile", "email"],
-        prompt: "select_account" // Forces account selection
-    })
+    (req, res, next) => {
+        console.log('Initiating Google OAuth flow');
+        passport.authenticate("google", { 
+            scope: ["profile", "email"],
+            prompt: "select_account"
+        })(req, res, next);
+    }
 );
+
 router.get("/google/callback",
-    passport.authenticate("google", {
-        failureRedirect: `${process.env.CLIENT_URL}/login?error=google_auth_failed`,
-        session: false
-    }),
+    (req, res, next) => {
+        console.log('Received Google callback');
+        passport.authenticate("google", {
+            failureRedirect: `${process.env.CLIENT_URL}/login?error=google_auth_failed`,
+            session: false
+        })(req, res, next);
+    },
     async (req, res) => {
         try {
+            console.log('Processing Google callback');
             const user = await User.findOrCreateOAuthUser(req.user, 'google');
             const token = user.generateAccessToken();
             
@@ -57,25 +102,43 @@ router.get("/google/callback",
             user.lastLogin = new Date();
             await user.save();
 
-            res.redirect(`${process.env.CLIENT_URL}/auth/callback?token=${token}`);
+            // Set auth token in cookie
+            const options = {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production'
+            };
+            res.cookie('accessToken', token, options);
+
+            // Redirect to Home route
+            console.log('Redirecting to Home route');
+            res.redirect('/auth/Home');
         } catch (error) {
             console.error('OAuth callback error:', error);
             res.redirect(`${process.env.CLIENT_URL}/login?error=oauth_error`);
         }
     }
 );
+
 router.get("/github",
-    passport.authenticate("github", {
-        scope: ["user:email"]
-    })
+    (req, res, next) => {
+        console.log('Initiating GitHub OAuth flow');
+        passport.authenticate("github", {
+            scope: ["user:email"]
+        })(req, res, next);
+    }
 );
+
 router.get("/github/callback",
-    passport.authenticate("github", {
-        failureRedirect: `${process.env.CLIENT_URL}/login?error=github_auth_failed`,
-        session: false
-    }),
+    (req, res, next) => {
+        console.log('Received GitHub callback');
+        passport.authenticate("github", {
+            failureRedirect: `${process.env.CLIENT_URL}/login?error=github_auth_failed`,
+            session: false
+        })(req, res, next);
+    },
     async (req, res) => {
         try {
+            console.log('Processing GitHub callback');
             const user = await User.findOrCreateOAuthUser(req.user, 'github');
             const token = user.generateAccessToken();
             
@@ -83,38 +146,106 @@ router.get("/github/callback",
             user.lastLogin = new Date();
             await user.save();
 
-            res.redirect(`${process.env.CLIENT_URL}/auth/callback?token=${token}`);
+            // Set auth token in cookie
+            const options = {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production'
+            };
+            res.cookie('accessToken', token, options);
+
+            // Redirect to Home route
+            console.log('Redirecting to Home route');
+            res.redirect('/auth/Home');
         } catch (error) {
             console.error('OAuth callback error:', error);
             res.redirect(`${process.env.CLIENT_URL}/login?error=oauth_error`);
         }
     }
 );
+
 // Protected Routes (require authentication)
-router.use(verifyJWT); // All routes below this will require authentication
-router.post("/logout",apiLimiter,logoutUser);
-router.post("/change-password",apiLimiter,changePassword);
-router.get("/refresh-token",apiLimiter,refreshAccessToken);
-router.get("/me",apiLimiter,getUserProfile);
-router.put("/profile",apiLimiter,updateUserProfile);
-router.delete("/account",apiLimiter,deleteAccount);
-router.get("/sessions", apiLimiter,checkRole(['user', 'admin']),getSessions);
-router.delete("/sessions/:sessionId",apiLimiter,checkRole(['user', 'admin']), revokeSession);
-router.delete("/sessions",apiLimiter,checkRole(['user', 'admin']), revokeAllSessions);
-// Home route (protected)
-router.get("/home",
+router.use(verifyJWT);
+
+router.post("/logout",
     apiLimiter,
+    logoutUser
+);
+
+router.post("/change-password",
+    apiLimiter,
+    validateNewPassword,
+    validateRequest,
+    changePassword
+);
+
+router.get("/refresh-token",
+    apiLimiter,
+    refreshAccessToken
+);
+
+router.get("/me",
+    apiLimiter,
+    getUserProfile
+);
+
+router.put("/profile",
+    apiLimiter,
+    validateProfileUpdate,
+    validateRequest,
+    updateUserProfile
+);
+
+router.delete("/account",
+    apiLimiter,
+    validateAccountDeletion,
+    validateRequest,
+    deleteAccount
+);
+
+// Session Management Routes
+router.get("/sessions", 
+    apiLimiter,
+    checkRole(['user', 'admin']),
+    getSessions
+);
+
+router.delete("/sessions/:sessionId",
+    apiLimiter,
+    checkRole(['user', 'admin']), 
+    revokeSession
+);
+
+router.delete("/delete-all-sessions",
+    apiLimiter,
+    checkRole(['user', 'admin']), 
+    revokeAllSessions
+);
+
+// Home route (protected)
+router.get("/Home",
+    verifyJWT,  // Protect this route
     (req, res) => {
         res.json({
-            message: "Welcome to the home page",
-            user: {
-                id: req.user._id,
-                username: req.user.username,
-                email: req.user.email,
-                role: req.user.role
+            status: 'success',
+            message: "Welcome to Home",
+            data: {
+                user: {
+                    id: req.user._id,
+                    username: req.user.username,
+                    email: req.user.email,
+                    role: req.user.role
+                }
             }
         });
     }
 );
+
+// Error handling for undefined routes
+router.use((req, res) => {
+    res.status(404).json({
+        status: 'error',
+        message: 'Route not found'
+    });
+});
 
 export default router; 

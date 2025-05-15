@@ -1,66 +1,95 @@
-import crypto from 'crypto';
 import { User } from '../model/user.model.js';
 import { emailService } from './emailService.js';
+import { ApiError } from '../utils/apiError.js';
+import jwt from 'jsonwebtoken';
 
-export class PasswordResetManager {
-    static async generateResetToken(user) {
-        // Generate reset token
-        const resetToken = crypto.randomBytes(32).toString('hex');
-        
-        // Hash token and set to user
-        user.resetPasswordToken = crypto
-            .createHash('sha256')
-            .update(resetToken)
-            .digest('hex');
-        
-        // Set expiry (10 minutes)
-        user.resetPasswordExpireAt = new Date(Date.now() + 10 * 60 * 1000);
-        
-        await user.save();
-        
-        return resetToken;
+class PasswordResetManager {
+    static async generateAccessToken(user) {
+        try {
+            if (!user) {
+                throw new ApiError(400, 'User is required');
+            }
+
+            // Generate access token
+            const accessToken = user.generateAccessToken();
+            
+            // Send reset email with the access token
+            await this.sendResetEmail(user, accessToken);
+            
+            return accessToken;
+        } catch (error) {
+            console.error('Error generating access token:', error);
+            if (error instanceof ApiError) {
+                throw error;
+            }
+            throw new ApiError(500, 'Failed to generate access token');
+        }
     }
 
-    static async sendResetEmail(user, resetToken) {
-        const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
-        
-        const message = `
-            <h1>Password Reset Request</h1>
-            <p>You requested a password reset. Click the link below to reset your password:</p>
-            <a href="${resetUrl}" target="_blank">Reset Password</a>
-            <p>This link will expire in 10 minutes.</p>
-            <p>If you didn't request this, please ignore this email.</p>
-        `;
+    static async sendResetEmail(user, accessToken) {
+        try {
+            if (!user) {
+                throw new ApiError(400, 'User is required');
+            }
 
-        await emailService.sendEmail({
-            email: user.email,
-            subject: 'Password Reset Request',
-            html: message
-        });
+            if (!user.email) {
+                throw new ApiError(400, 'User email is required');
+            }
+
+            if (!accessToken) {
+                throw new ApiError(400, 'Access token is required');
+            }
+
+            console.log('Sending reset email to:', user.email);
+            await emailService.sendPasswordResetEmail(user, accessToken);
+            console.log('Reset email sent successfully to:', user.email);
+        } catch (error) {
+            console.error('Failed to send reset email:', error);
+            if (error instanceof ApiError) {
+                throw error;
+            }
+            throw new ApiError(500, 'Failed to send reset email');
+        }
     }
 
     static async resetPassword(token, newPassword) {
-        // Hash the token
-        const hashedToken = crypto
-            .createHash('sha256')
-            .update(token)
-            .digest('hex');
+        try {
+            if (!token) {
+                throw new ApiError(400, 'Access token is required');
+            }
 
-        // Find user with token
-        const user = await User.findOne({
-            resetPasswordToken: hashedToken,
-            resetPasswordExpireAt: { $gt: Date.now() }
-        });
+            if (!newPassword) {
+                throw new ApiError(400, 'New password is required');
+            }
 
-        if (!user) {
-            throw new Error('Invalid or expired reset token');
+            // Verify the access token
+            const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+            
+            // Find user by ID from token
+            const user = await User.findById(decoded._id);
+            if (!user) {
+                throw new ApiError(400, 'User not found');
+            }
+
+            // Update password
+            user.password = newPassword;
+            await user.save();
+            
+            console.log('Password reset successful for user:', user.email);
+        } catch (error) {
+            console.error('Error resetting password:', error);
+            if (error instanceof ApiError) {
+                throw error;
+            }
+            if (error.name === 'JsonWebTokenError') {
+                throw new ApiError(400, 'Invalid access token');
+            }
+            if (error.name === 'TokenExpiredError') {
+                throw new ApiError(400, 'Access token has expired');
+            }
+            throw new ApiError(500, 'Failed to reset password');
         }
-
-        // Update password and clear reset fields
-        user.password = newPassword;
-        user.resetPasswordToken = undefined;
-        user.resetPasswordExpireAt = undefined;
-        
-        await user.save();
     }
-} 
+}
+
+export { PasswordResetManager }; 

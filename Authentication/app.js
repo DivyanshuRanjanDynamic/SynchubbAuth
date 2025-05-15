@@ -1,19 +1,16 @@
+// Import environment configuration first
+import { env } from './config/env.js';
+
+// Import other dependencies
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { Strategy as GitHubStrategy } from 'passport-github2';
 import authRoutes from './Auth/routes/auth.route.js';
 import mongoose from 'mongoose';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-// Load environment variables
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.join(__dirname, '.env') });
+import helmet from 'helmet';
 
 // Constants
 export const DBNAME = 'AuthenticationSynchubbDb';
@@ -21,19 +18,38 @@ export const DBNAME = 'AuthenticationSynchubbDb';
 // Initialize express app
 const app = express();
 
+// Security middleware
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", "data:", "https:"],
+            connectSrc: ["'self'", "https://www.synchubb.in", env.SERVER_URL, env.CLIENT_URL],
+            fontSrc: ["'self'"],
+            objectSrc: ["'none'"],
+            mediaSrc: ["'self'"],
+            frameSrc: ["'self'", "https://www.synchubb.in"]
+        }
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginOpenerPolicy: { policy: "same-origin" }
+}));
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // CORS configuration
-const corsOptions = {
-  origin: ['https://www.synchubb.in', 'https://synchubb.in'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  exposedHeaders: ['set-cookie']
-};
-app.use(cors(corsOptions));
+app.use(cors({
+    origin: ['http://localhost:3000', 'https://www.synchubb.in'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    exposedHeaders: ['Authorization']
+}));
 
 // Session configuration
 app.use(
@@ -61,13 +77,15 @@ passport.use(
         {
             clientID: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            callbackURL: 'https://auth-service-ihpj.onrender.com/auth/google/callback',
+            callbackURL: `${process.env.SERVER_URL}/auth/google/callback`,
+            scope: ['profile', 'email']
         },
         async (accessToken, refreshToken, profile, done) => {
             try {
-                // Find or create user logic will be implemented in auth controller
+                console.log('Google OAuth callback received');
                 return done(null, profile);
             } catch (error) {
+                console.error('Google OAuth error:', error);
                 return done(error, null);
             }
         }
@@ -79,13 +97,15 @@ passport.use(
         {
             clientID: process.env.GITHUB_CLIENT_ID,
             clientSecret: process.env.GITHUB_CLIENT_SECRET,
-            callbackURL: 'https://auth-service-ihpj.onrender.com/auth/github/callback',
+            callbackURL: `${process.env.SERVER_URL}/auth/github/callback`,
+            scope: ['user:email']
         },
         async (accessToken, refreshToken, profile, done) => {
             try {
-                // Find or create user logic will be implemented in auth controller
+                console.log('GitHub OAuth callback received');
                 return done(null, profile);
             } catch (error) {
+                console.error('GitHub OAuth error:', error);
                 return done(error, null);
             }
         }

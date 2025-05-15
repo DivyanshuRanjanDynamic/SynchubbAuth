@@ -9,7 +9,6 @@ const userSchema = new mongoose.Schema({
         unique: true,
         lowercase: true,
         trim: true,
-       
     },
     password: { 
         type: String, 
@@ -38,24 +37,6 @@ const userSchema = new mongoose.Schema({
     tokenVersion: {
         type: Number,
         default: 0
-    },
-    // Email verification
-    emailVerificationToken: {
-        type: String,
-        default: null
-    },
-    emailVerificationExpireAt: {
-        type: Date,
-        default: null
-    },
-    // Password reset
-    resetPasswordToken: {
-        type: String,
-        default: null
-    },
-    resetPasswordExpireAt: {
-        type: Date,
-        default: null
     },
     // Session management
     lastLogin: {
@@ -100,8 +81,7 @@ const userSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Indexes for better query performance
-userSchema.index({ resetPasswordToken: 1 });
-userSchema.index({ emailVerificationToken: 1 });
+userSchema.index({ refreshToken: 1 });
 
 // Password hashing middleware
 userSchema.pre('save', async function(next) {
@@ -109,7 +89,7 @@ userSchema.pre('save', async function(next) {
     
     try {
         const salt = await bcrypt.genSalt(12);
-        this.password =  bcrypt.hash(this.password, salt);
+        this.password = await bcrypt.hash(this.password, salt);
         next();
     } catch (error) {
         next(error);
@@ -118,7 +98,12 @@ userSchema.pre('save', async function(next) {
 
 // Password comparison method
 userSchema.methods.comparePassword = async function(candidatePassword) {
-    return await bcrypt.compare(candidatePassword, this.password);
+    try {
+        return await bcrypt.compare(candidatePassword, this.password);
+    } catch (error) {
+        console.error('Password comparison error:', error);
+        return false;
+    }
 };
 
 // Token generation methods

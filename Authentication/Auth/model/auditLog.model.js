@@ -3,20 +3,20 @@ import mongoose from 'mongoose';
 const auditLogSchema = new mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
+        ref: 'User',
+        required: true
     },
     action: {
         type: String,
         required: true,
         enum: [
+            'REGISTER',
             'LOGIN',
             'LOGOUT',
-            'REGISTER',
             'PASSWORD_RESET',
-            'PASSWORD_CHANGE',
+            'EMAIL_VERIFICATION',
             'PROFILE_UPDATE',
-            'TOKEN_REFRESH',
-            'SESSION_REVOKE'
+            'ACCOUNT_DELETION'
         ]
     },
     status: {
@@ -24,10 +24,17 @@ const auditLogSchema = new mongoose.Schema({
         required: true,
         enum: ['SUCCESS', 'FAILURE']
     },
-    ipAddress: String,
-    userAgent: String,
-    details: {
-        type: mongoose.Schema.Types.Mixed
+    ipAddress: {
+        type: String,
+        required: true
+    },
+    userAgent: {
+        type: String,
+        required: true
+    },
+    error: {
+        type: String,
+        required: false
     },
     timestamp: {
         type: Date,

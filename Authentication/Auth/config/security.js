@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import compression from 'compression';
 import { createClient } from 'redis';
+import { env } from '../../config/env.js';
 
 // Rate limiting configuration
 export const limiter = rateLimit({
@@ -15,7 +16,7 @@ export const limiter = rateLimit({
 
 // CORS configuration
 export const corsOptions = {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: env.CLIENT_URL || 'http://localhost:3000',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
@@ -30,7 +31,7 @@ export const helmetConfig = helmet({
             scriptSrc: ["'self'", "'unsafe-inline'"],
             styleSrc: ["'self'", "'unsafe-inline'"],
             imgSrc: ["'self'", "data:", "https:"],
-            connectSrc: ["'self'", process.env.CLIENT_URL],
+            connectSrc: ["'self'", env.CLIENT_URL],
         },
     },
     crossOriginEmbedderPolicy: true,
@@ -43,7 +44,7 @@ export const helmetConfig = helmet({
     ieNoOpen: true,
     noSniff: true,
     referrerPolicy: { policy: "strict-origin-when-cross-origin" },
-    xssFilter: true,
+    xssFilter: true
 });
 
 // Redis client for caching and rate limiting
