@@ -9,6 +9,8 @@ import { ApiResponse } from "../utils/apiResponse.js";
 import { asynchandler } from "../utils/asynchandler.js";
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { emailService } from "../utils/emailService.js";
+import mongoose from "mongoose";
 
 
  export const generateAccessAndRefreshTokens = async (userId) => {
@@ -322,7 +324,7 @@ export const deleteAccount = asynchandler(async (req, res) => {
     user.isActive = false;
     user.deactivatedAt = new Date();
     user.isVerified = false;
-    user.lockUntil = Infinity;
+    user.lockUntil = null;
     await user.save();
 
     // Deactivate all sessions
@@ -480,7 +482,7 @@ export const forgotPassword = asynchandler(async (req, res) => {
 export const resetPassword = asynchandler(async (req, res) => {
     const { token } = req.params;
     const { password, confirmPassword } = req.body;
-
+    
     if (!token) {
         throw new ApiError(400, "Reset token is required");
     }
@@ -501,7 +503,11 @@ export const resetPassword = asynchandler(async (req, res) => {
     try {
         // Reset password and get user info for audit log
         const user = await PasswordResetManager.resetPassword(token, password);
+       
 
+          if (!user) {
+        throw new ApiError(400, "Invalid or expired reset token");
+    }
         // Log success
         await AuditLog.create({
             userId: user._id,
@@ -516,15 +522,21 @@ export const resetPassword = asynchandler(async (req, res) => {
         );
     } catch (error) {
         console.error('Reset password error:', error);
+         const user = await PasswordResetManager.resetPassword(token, password);
 
-        // Attempt audit log even if userId isn't available
-        await AuditLog.create({
-            action: 'PASSWORD_RESET',
-            status: 'FAILURE',
-            error: error.message,
-            ipAddress: req.ip,
-            userAgent: req.get('User-Agent')
-        });
+        // Only include userId if user is defined
+    const auditLogData = {
+        action: 'PASSWORD_RESET',
+        status: 'FAILURE',
+        error: error.message,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+    };
+    if (typeof user !== 'undefined' && user && user._id) {
+        auditLogData.userId = user._id;
+    }
+
+    await AuditLog.create(auditLogData);
 
         if (error instanceof ApiError) {
             throw error;
@@ -625,6 +637,7 @@ export const revokeSession = asynchandler(async (req, res) => {
     }
 
     const anySession = await Session.findById(sessionId);
+    console.log('Session found:', anySession);
 
     if (!anySession) {
         throw new ApiError(404, "Session not found");

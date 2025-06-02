@@ -76,6 +76,7 @@ class PasswordResetManager {
             await user.save();
             
             console.log('Password reset successful for user:', user.email);
+            return user;
         } catch (error) {
             console.error('Error resetting password:', error);
             if (error instanceof ApiError) {

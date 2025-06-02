@@ -4,7 +4,7 @@ const auditLogSchema = new mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true
+        required: false
     },
     action: {
         type: String,
@@ -14,9 +14,15 @@ const auditLogSchema = new mongoose.Schema({
             'LOGIN',
             'LOGOUT',
             'PASSWORD_RESET',
+            'PASSWORD_RESET_REQUEST',
+            'PASSWORD_CHANGE',
             'EMAIL_VERIFICATION',
+            'VIEW_PROFILE',
+            'DELETE_ACCOUNT',
             'PROFILE_UPDATE',
-            'ACCOUNT_DELETION'
+            'SESSION_LIST',
+            'ACCOUNT_DELETION',
+            'REVOKE_ALL_SESSIONS'
         ]
     },
     status: {
