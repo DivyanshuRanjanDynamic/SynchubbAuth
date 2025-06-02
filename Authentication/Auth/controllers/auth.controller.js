@@ -28,10 +28,19 @@ import crypto from 'crypto';
       console.log( "Something went wrong while generating the access token");
   }
 };
+// Helper to generate 4-digit code
+const generateCode = () => {
+  return Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit string
+}
 
 // Register new user
 export const registerUser = asynchandler(async (req, res) => {
     const { username, email, password } = req.body;
+
+     // Validate request
+    if (!username || !email || !password) {
+        throw new ApiError(400, "Username, email and password are required");
+    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
@@ -39,19 +48,31 @@ export const registerUser = asynchandler(async (req, res) => {
             throw new ApiError(409, "User already exists");
         }
 
-    // Create new user
+  
+
+    // Generate verification token and send email
+    // const verificationToken = await EmailVerificationManager.generateVerificationToken(user);
+    // await EmailVerificationManager.sendVerificationEmail(user, verificationToken);/
+
+     const verificationCode = generateCode();
+    const verificationExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+
+      // Create new user
         const user = await User.create({
             username: username.toLowerCase(),
             email,
-            password
+            password,
+            verificationCode,
+            verificationCodeExpires: verificationExpiry,
+            isVerified: false,
         });
+         // Send 4-digit code via email
+         console.log('User object:', user);
+console.log('User email:', user.email);
 
-    // Generate verification token and send email
-    const verificationToken = await EmailVerificationManager.generateVerificationToken(user);
-    await EmailVerificationManager.sendVerificationEmail(user, verificationToken);
+  await EmailVerificationManager.sendVerificationEmail(user, `Your verification code is: ${verificationCode}`);
 
-
-    console.log(verificationToken);
     // Log registration
     await AuditLog.create({
         userId: user._id,
@@ -62,7 +83,7 @@ export const registerUser = asynchandler(async (req, res) => {
     });
 
     return res.status(201).json(
-        new ApiResponse(201, null, "Registration successful. Please check your email for verification.")
+        new ApiResponse(201, null, "Registration successful. Please check your email for 4-digit  verification code .")
     );
 });
 
@@ -74,6 +95,11 @@ export const loginUser = asynchandler(async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) {
         throw new ApiError(401, "Invalid credentials");
+    }
+
+      // ✅ Check if email is verified
+    if (!user.isVerified) {
+        throw new ApiError(403, "Please verify your email before logging in");
     }
 
     // Check if account is locked
@@ -146,34 +172,35 @@ export const loginUser = asynchandler(async (req, res) => {
 
 // Logout user
 export const logoutUser = asynchandler(async (req, res) => {
-    // Get both tokens
     const accessToken = req.cookies?.accessToken || 
-                       req.header("Authorization")?.replace("Bearer ", "");
+                        req.header("Authorization")?.replace("Bearer ", "");
     const refreshToken = req.cookies?.refreshToken;
 
     if (!accessToken) {
         throw new ApiError(400, "Access token is required");
     }
 
-    // Get user ID from the access token
-    const decodedToken = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
-    const userId = decodedToken._id;
+    let userId;
+    try {
+        const decodedToken = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
+        userId = decodedToken._id;
+    } catch (error) {
+        throw new ApiError(401, "Invalid or expired access token");
+    }
 
-    // Deactivate all active sessions for this user
+    // Deactivate all active sessions
     await Session.updateMany(
         { userId, isActive: true },
         { isActive: false }
     );
 
-    // Blacklist both tokens
-    if (accessToken) {
-        await TokenManager.blacklistToken(accessToken, 'LOGOUT');
-    }
+    // Blacklist tokens
+    await TokenManager.blacklistToken(accessToken, 'LOGOUT');
     if (refreshToken) {
         await TokenManager.blacklistToken(refreshToken, 'LOGOUT');
     }
 
-    // Log logout
+    // Log the logout
     await AuditLog.create({
         userId,
         action: 'LOGOUT',
@@ -182,6 +209,7 @@ export const logoutUser = asynchandler(async (req, res) => {
         userAgent: req.get('User-Agent')
     });
 
+    // Clear cookies
     const options = {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production'
@@ -204,12 +232,13 @@ export const updateUserProfile = asynchandler(async (req, res) => {
             throw new ApiError(404, "User not found");
         }
 
-        // Update profile fields
+        let emailChanged = false;
+
+        // Update username
         if (username) {
-            // Check if username is already taken
             const existingUser = await User.findOne({ 
-                username: username.toLowerCase(),
-                _id: { $ne: user._id }
+                username: username.toLowerCase(), 
+                _id: { $ne: user._id } 
             });
             if (existingUser) {
                 throw new ApiError(409, "Username is already taken");
@@ -217,22 +246,29 @@ export const updateUserProfile = asynchandler(async (req, res) => {
             user.username = username.toLowerCase();
         }
 
-        if (email) {
-            // Check if email is already taken
+        // Update email
+        if (email && email.toLowerCase() !== user.email) {
             const existingUser = await User.findOne({ 
-                email: email.toLowerCase(),
-                _id: { $ne: user._id }
+                email: email.toLowerCase(), 
+                _id: { $ne: user._id } 
             });
             if (existingUser) {
                 throw new ApiError(409, "Email is already taken");
             }
             user.email = email.toLowerCase();
-            user.isVerified = false; // Reset verification status if email is changed
+            user.isVerified = false;
+            emailChanged = true;
         }
 
         await user.save();
 
-        // Log profile update
+        // Send verification email if email was changed
+        if (emailChanged) {
+            const newAccessToken = await TokenManager.generateAccessToken(user);
+            await AuthService.sendVerificationEmail(user, newAccessToken);
+        }
+
+        // Log update
         await AuditLog.create({
             userId: user._id,
             action: 'PROFILE_UPDATE',
@@ -253,7 +289,9 @@ export const updateUserProfile = asynchandler(async (req, res) => {
                         isVerified: user.isVerified
                     }
                 },
-                "Profile updated successfully"
+                emailChanged 
+                    ? "Profile updated. Verification email sent to new address." 
+                    : "Profile updated successfully"
             )
         );
     } catch (error) {
@@ -265,12 +303,13 @@ export const updateUserProfile = asynchandler(async (req, res) => {
     }
 });
 
+
 // Delete user account
 export const deleteAccount = asynchandler(async (req, res) => {
     const { password } = req.body;
 
     const user = await User.findById(req.user._id).select('+password');
-        if (!user) {
+    if (!user) {
         throw new ApiError(404, "User not found");
     }
 
@@ -279,9 +318,11 @@ export const deleteAccount = asynchandler(async (req, res) => {
         throw new ApiError(401, "Password is incorrect");
     }
 
-    // Soft delete the user
+    // Soft delete
     user.isActive = false;
     user.deactivatedAt = new Date();
+    user.isVerified = false;
+    user.lockUntil = Infinity;
     await user.save();
 
     // Deactivate all sessions
@@ -290,73 +331,137 @@ export const deleteAccount = asynchandler(async (req, res) => {
         { isActive: false }
     );
 
-    return res.status(200).json(
-        new ApiResponse(200, null, "Account deleted successfully")
-    );
+    // Blacklist current tokens
+    const accessToken = req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ", "");
+    const refreshToken = req.cookies?.refreshToken;
+
+    if (accessToken) await TokenManager.blacklistToken(accessToken, 'DELETE_ACCOUNT');
+    if (refreshToken) await TokenManager.blacklistToken(refreshToken, 'DELETE_ACCOUNT');
+
+    // Audit log
+    await AuditLog.create({
+        userId: user._id,
+        action: 'DELETE_ACCOUNT',
+        status: 'SUCCESS',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+    });
+
+    // Clear cookies
+    const options = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production'
+    };
+
+    return res
+        .status(200)
+        .clearCookie("accessToken", options)
+        .clearCookie("refreshToken", options)
+        .json(new ApiResponse(200, null, "Account deleted successfully"));
 });
+
 
 // Verify email
 export const verifyEmail = asynchandler(async (req, res) => {
-    const { token } = req.params;
+    const { email, code } = req.body;
 
-    if (!token) {
-        throw new ApiError(400, "Verification token is required");
+    if (!email || !code) {
+        throw new ApiError(400, "Email and verification code are required");
     }
 
-    try {
-        await EmailVerificationManager.verifyEmail(token);
-        return res.status(200).json(
-            new ApiResponse(200, null, "Email verified successfully")
-        );
-    } catch (error) {
-        if (error instanceof ApiError) {
-            throw error;
-        }
-        throw new ApiError(500, "Failed to verify email");
+    const normalizedEmail = email.toLowerCase();
+    const user = await User.findOne({ email: normalizedEmail });
+
+    if (!user || !user.emailVerification) {
+        throw new ApiError(400, "Invalid or expired verification");
     }
+
+    if (user.isVerified) {
+        throw new ApiError(400, "Email already verified");
+    }
+
+      const savedCode = user.verificationCode;
+     const expiresAt = user.verificationCodeExpires;
+    
+      
+    if (Date.now() > new Date(expiresAt).getTime()) {
+        throw new ApiError(410, "Verification code expired");
+    }
+
+    console.log(savedCode);
+     console.log(code);
+    if (code !== savedCode) {
+        throw new ApiError(400, "Invalid verification code");
+    }
+
+    user.isVerified = true;
+      user.verificationCode = undefined;
+     user.verificationCodeExpires = undefined;
+    await user.save();
+
+    // Audit log
+    await AuditLog.create({
+        userId: user._id,
+        action: 'EMAIL_VERIFICATION',
+        status: 'SUCCESS',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+    });
+
+    return res.status(200).json(
+        new ApiResponse(200, null, "Email verified successfully")
+    );
 });
 
 // Forgot Password
 export const forgotPassword = asynchandler(async (req, res) => {
     const { email } = req.body;
-    
+
     if (!email) {
         throw new ApiError(400, "Email is required");
     }
 
+    const normalizedEmail = email.toLowerCase();
+
     // Find user by email
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: normalizedEmail });
+
+    // Always respond the same way to prevent enumeration
+    const genericMessage = "If an account exists with this email, you will receive a password reset link.";
+
     if (!user) {
-        // Return success even if user not found to prevent email enumeration
-        return res.status(200).json(
-            new ApiResponse(200, null, "If an account exists with this email, you will receive a password reset link.")
-        );
+        return res.status(200).json(new ApiResponse(200, null, genericMessage));
     }
 
     try {
-        // Generate access token
+        // Generate reset token (JWT or random token)
         const accessToken = await PasswordResetManager.generateAccessToken(user);
-        console.log('Generated access token for password reset');
-        
-        // Log the password reset request
+
+        // Create password reset URL
+        const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${accessToken}`;
+
+        // Send email with reset link
+        await emailService.sendPasswordResetEmail(user, resetUrl);
+
+        // Log audit
         await AuditLog.create({
             userId: user._id,
-            action: 'PASSWORD_RESET',
+            action: 'PASSWORD_RESET_REQUEST',
             status: 'SUCCESS',
             ipAddress: req.ip,
             userAgent: req.get('User-Agent')
         });
 
         return res.status(200).json(
-            new ApiResponse(200, null, "You will receive a password reset link on your email.")
+            new ApiResponse(200, null, genericMessage)
         );
     } catch (error) {
-        console.error('Error in forgot password:', error);
-        
-        // Log the error
+        console.error("Error in forgotPassword:", error.message);
+
+        // Log audit failure
         await AuditLog.create({
             userId: user._id,
-            action: 'PASSWORD_RESET',
+            action: 'PASSWORD_RESET_REQUEST',
             status: 'FAILURE',
             error: error.message,
             ipAddress: req.ip,
@@ -370,15 +475,13 @@ export const forgotPassword = asynchandler(async (req, res) => {
     }
 });
 
+
 // Reset Password
 export const resetPassword = asynchandler(async (req, res) => {
-    console.log('Request params:', req.params);
     const { token } = req.params;
     const { password, confirmPassword } = req.body;
-    console.log('Token from params:', token);
 
     if (!token) {
-        console.log('Token is missing in URL params');
         throw new ApiError(400, "Reset token is required");
     }
 
@@ -387,29 +490,41 @@ export const resetPassword = asynchandler(async (req, res) => {
     }
 
     if (password !== confirmPassword) {
-        throw new ApiError(400, "New password and confirm password do not match");
+        throw new ApiError(400, "Passwords do not match");
+    }
+
+    // Optional: Enforce password strength
+    if (password.length < 8 || !/[A-Z]/.test(password)) {
+        throw new ApiError(400, "Password must be at least 8 characters and include an uppercase letter");
     }
 
     try {
-        // Reset password using the access token from params
-        await PasswordResetManager.resetPassword(token, password);
+        // Reset password and get user info for audit log
+        const user = await PasswordResetManager.resetPassword(token, password);
+
+        // Log success
+        await AuditLog.create({
+            userId: user._id,
+            action: 'PASSWORD_RESET',
+            status: 'SUCCESS',
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent')
+        });
 
         return res.status(200).json(
             new ApiResponse(200, null, "Password has been reset successfully")
         );
     } catch (error) {
-        console.error('Error in reset password:', error);
-        
-        // Log the error
-        if (error instanceof ApiError) {
-            await AuditLog.create({
-                action: 'PASSWORD_RESET',
-                status: 'FAILURE',
-                error: error.message,
-                ipAddress: req.ip,
-                userAgent: req.get('User-Agent')
-            });
-        }
+        console.error('Reset password error:', error);
+
+        // Attempt audit log even if userId isn't available
+        await AuditLog.create({
+            action: 'PASSWORD_RESET',
+            status: 'FAILURE',
+            error: error.message,
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent')
+        });
 
         if (error instanceof ApiError) {
             throw error;
@@ -418,21 +533,26 @@ export const resetPassword = asynchandler(async (req, res) => {
     }
 });
 
+
 // Change password (for logged-in users)
 export const changePassword = asynchandler(async (req, res) => {
-    console.log('Change password request received');
-    console.log('Request body:', req.body);
-    console.log('User from request:', req.user);
-
     const { previousPassword, password, confirmPassword } = req.body;
-    
-    if (!previousPassword) {
-        throw new ApiError(400, "Please fill all fields");
+
+    if (!previousPassword || !password || !confirmPassword) {
+        throw new ApiError(400, "Please fill all required fields");
+    }
+
+    if (password !== confirmPassword) {
+        throw new ApiError(400, "New password and confirm password do not match");
+    }
+
+    // Optional: Password strength validation
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/\d/.test(password)) {
+        throw new ApiError(400, "Password must be at least 8 characters, include an uppercase letter and a number");
     }
 
     const user = await User.findById(req.user._id).select("+password");
-    console.log('User found in database:', user ? 'Yes' : 'No');
-    
+
     if (!user) {
         throw new ApiError(404, "User not found");
     }
@@ -442,36 +562,51 @@ export const changePassword = asynchandler(async (req, res) => {
     }
 
     const isPasswordCorrect = await user.comparePassword(previousPassword);
-    console.log('Previous password correct:', isPasswordCorrect);
-    
+
     if (!isPasswordCorrect) {
-        throw new ApiError(400, "Unauthorized user");
-    }
-
-    if (!password || !confirmPassword) {
-        throw new ApiError(400, "Please fill both fields");
-    }
-
-    if (password !== confirmPassword) {
-        throw new ApiError(400, "Passwords do not match");
+        throw new ApiError(401, "Previous password is incorrect");
     }
 
     user.password = password;
-    await user.save({ validateBeforeSave: false });
-    console.log('Password updated successfully for user:', user.email);
+    await user.save();  // validateBeforeSave defaults to true, which is safer
+
+    // Optional: Audit log for password change
+    await AuditLog.create({
+        userId: user._id,
+        action: 'PASSWORD_CHANGE',
+        status: 'SUCCESS',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+    });
 
     return res.status(200).json(
-        new ApiResponse(200, "Password Updated Successfully", user)
+        new ApiResponse(200, null, "Password updated successfully")
     );
 });
 
 // Get user sessions
 export const getSessions = asynchandler(async (req, res) => {
-    const sessions = await Session.find({ 
+
+       if (!req.user || !req.user._id) {
+        throw new ApiError(401, "Unauthorized access");
+    }
+
+   const sessions = await Session.find({ 
         userId: req.user._id,
         isActive: true 
+    })
+    .select("createdAt userAgent ipAddress lastUsedAt")
+    .sort({ lastUsedAt: -1 });
+
+
+     await AuditLog.create({
+        userId: req.user._id,
+        action: 'SESSION_LIST',
+        status: 'SUCCESS',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
     });
-console.log(req.user._id);
+
     return res.status(200).json(
         new ApiResponse(200, sessions, "Sessions retrieved successfully")
     );
@@ -480,84 +615,143 @@ console.log(req.user._id);
 // Revoke session
 export const revokeSession = asynchandler(async (req, res) => {
     const { sessionId } = req.params;
-    console.log('Revoke Session Debug:', {
-        sessionId,
-        currentUserId: req.user._id,
-        currentUserEmail: req.user.email
-    });
 
-    // First check if the session exists at all
+    if (!req.user || !req.user._id) {
+        throw new ApiError(401, "Unauthorized");
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(sessionId)) {
+        throw new ApiError(400, "Invalid session ID format");
+    }
+
     const anySession = await Session.findById(sessionId);
-    console.log('Session found in database:', anySession ? {
-        sessionId: anySession._id,
-        userId: anySession.userId,
-        isActive: anySession.isActive
-    } : 'No session found');
 
-    // Then check if it belongs to the current user
-    const session = await Session.findOne({ 
-        _id: sessionId,
-        userId: req.user._id 
-    });
-
-    if (!session) {
-        if (anySession) {
-            console.log('Session exists but belongs to different user:', {
-                sessionUserId: anySession.userId.toString(),
-                currentUserId: req.user._id.toString(),
-                isActive: anySession.isActive
-            });
-        } else {
-            console.log('Session ID does not exist in database');
-        }
+    if (!anySession) {
         throw new ApiError(404, "Session not found");
     }
 
-    console.log('Session found and belongs to current user:', {
-        sessionId: session._id,
-        userId: session.userId,
-        isActive: session.isActive
-    });
+    if (anySession.userId.toString() !== req.user._id.toString()) {
+        throw new ApiError(403, "You are not authorized to revoke this session");
+    }
 
-    await session.deactivate();
-    await TokenManager.blacklistToken(session.refreshToken);
+    if (!anySession.isActive) {
+        throw new ApiError(400, "Session is already inactive");
+    }
+
+    await anySession.deactivate();
+
+    if (anySession.refreshToken) {
+        await TokenManager.blacklistToken(anySession.refreshToken);
+    }
+
+    await AuditLog.create({
+        userId: req.user._id,
+        action: 'SESSION_REVOKE',
+        status: 'SUCCESS',
+        metadata: { sessionId },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+    });
 
     return res.status(200).json(
         new ApiResponse(200, null, "Session revoked successfully")
     );
 });
 
+
 // Revoke all sessions
 export const revokeAllSessions = asynchandler(async (req, res) => {
+    if (!req.user || !req.user._id) {
+        throw new ApiError(401, "Unauthorized");
+    }
+
     try {
+        // Find all active sessions
+        const sessions = await Session.find({ userId: req.user._id, isActive: true });
+
+        // Blacklist refresh tokens
+        for (const session of sessions) {
+            if (session.refreshToken) {
+                await TokenManager.blacklistToken(session.refreshToken);
+            }
+        }
+
+        // Deactivate sessions
         await Session.updateMany(
-            { userId: req.user._id },
+            { userId: req.user._id, isActive: true },
             { isActive: false }
         );
+
+        // Log audit trail
+        await AuditLog.create({
+            userId: req.user._id,
+            action: 'REVOKE_ALL_SESSIONS',
+            status: 'SUCCESS',
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent')
+        });
 
         return res.status(200).json(
             new ApiResponse(200, null, "All sessions revoked successfully")
         );
     } catch (error) {
+        console.error("Error in revokeAllSessions:", error);
+
+        await AuditLog.create({
+            userId: req.user?._id,
+            action: 'REVOKE_ALL_SESSIONS',
+            status: 'FAILURE',
+            error: error?.message,
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent')
+        });
+
         throw new ApiError(500, error?.message || "Error revoking sessions");
     }
 });
 
+
 // Get user profile
 export const getUserProfile = asynchandler(async (req, res) => {
+    if (!req.user || !req.user._id) {
+        throw new ApiError(401, "Unauthorized");
+    }
+
     try {
-        const user = await User.findById(req.user._id).select('-password -refreshToken');
+        const user = await User.findById(req.user._id)
+            .select('-password -refreshToken -__v -verificationToken -otp -otpExpiry');
+
         if (!user) {
             throw new ApiError(404, "User not found");
         }
+
+        await AuditLog.create({
+            userId: req.user._id,
+            action: 'VIEW_PROFILE',
+            status: 'SUCCESS',
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent')
+        });
 
         return res.status(200).json(
             new ApiResponse(200, user, "User profile retrieved successfully")
         );
     } catch (error) {
+        console.error("Error in getUserProfile:", error);
+
+        await AuditLog.create({
+            userId: req.user?._id,
+            action: 'VIEW_PROFILE',
+            status: 'FAILURE',
+            error: error?.message,
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent')
+        });
+
         throw new ApiError(500, error?.message || "Error retrieving user profile");
     }
 });
+
 
 // Refresh access token
 export const refreshAccessToken = asynchandler(async (req, res) => {

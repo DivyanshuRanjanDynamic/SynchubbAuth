@@ -52,7 +52,7 @@ router.post("/login",
     loginUser
 );
 
-router.get("/verify-email/:token",
+router.get("/verify-email",
     apiLimiter,
     verifyEmail
 );
