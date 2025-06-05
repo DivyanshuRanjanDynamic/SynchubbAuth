@@ -7,13 +7,13 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with verbose output
-RUN npm install --verbose
+# Install dependencies with verbose output 
+RUN npm install --verbose 
 
 # Copy source code
 COPY . .
 
-# Create SSL directory
+# Create SSL directory 
 RUN mkdir -p /app/Auth/server/ssl
 
 # Create a non-root user
@@ -51,5 +51,5 @@ EXPOSE ${PORT}
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/health || exit 1
 
-# Start the application with debugging
+# Start the application with debugging 
 CMD ["sh", "-c", "echo 'Starting application on port ${PORT}...' && node Auth/handleServerAndDatabase.js"]
