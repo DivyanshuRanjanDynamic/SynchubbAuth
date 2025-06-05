@@ -1,34 +1,38 @@
-# Use Node.js LTS version
-FROM node:18-alpine
+# Use Node.js LTS version as base image
+FROM node:20-alpine
 
-# Install curl for healthcheck
-RUN apk add --no-cache curl
-
-# Set working directory
+# Set working directory to match project structure
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies based on NODE_ENV
-ARG NODE_ENV=production
-RUN if [ "$NODE_ENV" = "development" ] ; then npm install --legacy-peer-deps ; else npm install --production --legacy-peer-deps ; fi
+# Install dependencies with verbose output
+RUN npm install --verbose
 
-# Copy the rest of the application
+# Copy source code
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p Auth/utils Auth/models Auth/controllers Auth/middleware Auth/routes
+#Create a SSl certificate directory
+RUN mkdir -p /app/Auth/server/ssl
 
-# Create .env file from example if it doesn't exist
-RUN if [ ! -f .env ]; then cp .env.example .env; fi
+# Create a non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN chown -R appuser:appgroup /app
+
+# Switch to non-root user
+USER appuser
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=8000
 
 # Expose the port
-EXPOSE 8000
+EXPOSE ${PORT}
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s \
-  CMD curl -f http://localhost:8000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/health || exit 1
 
-# Start the application based on NODE_ENV
-CMD if [ "$NODE_ENV" = "development" ] ; then npm run dev ; else npm start ; fi 
+# Start the application with debugging
+CMD ["sh", "-c", "echo 'Starting application on port ${port}...' && node Auth/handleServerAndDatabase.js"]

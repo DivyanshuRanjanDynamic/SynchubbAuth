@@ -69,6 +69,9 @@ class EmailService {
     }
 
     async sendVerificationEmail(user, token) {
+          if (!user || !user.email) {
+        throw new Error('User or user.email is missing when sending verification email');
+    }
         const verificationUrl = `${process.env.CLIENT_URL}/verify-email/${token}`;
         const message = `
             <h1>Email Verification</h1>
