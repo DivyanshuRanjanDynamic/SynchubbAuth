@@ -1,7 +1,7 @@
 import { app } from "../app.js";
 import connectDB from "./db/connectDB.js";
 import dotenv from "dotenv";
-import https from "httpolyglot";
+import http from "http";
 import fs from "fs";
 import crypto from 'crypto';
 import path from "path";
@@ -27,13 +27,14 @@ dotenv.config({ path: envPath });
 console.log('Environment Variables:', {
     EMAIL_USER: process.env.EMAIL_USERNAME,
     hasEmailPassword: !!process.env.EMAIL_PASSWORD,
-    NODE_ENV: process.env.NODE_ENV
+    NODE_ENV: process.env.NODE_ENV,
+    PORT: process.env.PORT
 });
 
-// SSL Path inside Auth Service
-const sslDir = path.join(__dirname,'server', 'ssl');
-const keyPath = path.join(sslDir, 'key.pem');
-const certPath = path.join(sslDir, 'cert.pem');
+// SSL Path inside Auth Service (no longer needed for server startup on Render)
+// const sslDir = path.join(__dirname,'server', 'ssl');
+// const keyPath = path.join(sslDir, 'key.pem');
+// const certPath = path.join(sslDir, 'cert.pem');
 
 // Apply security middleware
 app.use(helmetConfig);
@@ -41,80 +42,16 @@ app.use(limiter);
 app.use(cors(corsOptions));
 app.use(compressionMiddleware);
 
-// Debug function to analyze certificate files
+// Debug function to analyze certificate files (no longer directly used for server)
 function debugCertificateFiles() {
-    const sslDir = path.join(__dirname, 'server', 'ssl');
-    console.log('SSL Directory:', sslDir);
-    
-    // Read files with explicit encoding
-    const keyContent = fs.readFileSync(keyPath, 'utf8');
-    const certContent = fs.readFileSync(certPath, 'utf8');
-    
-    return { key: keyContent, cert: certContent };
+    console.log('debugCertificateFiles is not active in production setup.');
+    return {};
 }
 
+// Certificate generation (only for local development if needed, not for Render production)
 const generateCertificatePair = async () => {
-    try {
-        // Generate a self-signed certificate
-        const cert = crypto.createCertificate({
-            serialNumber: '1',
-            subject: {
-                C: 'US',
-                ST: 'State',
-                L: 'City',
-                O: 'Organization',
-                OU: 'Organizational Unit',
-                CN: 'localhost'
-            },
-            issuer: {
-                C: 'US',
-                ST: 'State',
-                L: 'City',
-                O: 'Organization',
-                OU: 'Organizational Unit',
-                CN: 'localhost'
-            },
-            notBefore: new Date(),
-            notAfter: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
-            publicKey: crypto.generateKeyPairSync('rsa', {
-                modulusLength: 2048,
-                publicKeyEncoding: {
-                    type: 'spki',
-                    format: 'pem'
-                },
-                privateKeyEncoding: {
-                    type: 'pkcs8',
-                    format: 'pem'
-                }
-            }).publicKey
-        });
-
-        const { privateKey } = crypto.generateKeyPairSync('rsa', {
-            modulusLength: 2048,
-            publicKeyEncoding: {
-                type: 'spki',
-                format: 'pem'
-            },
-            privateKeyEncoding: {
-                type: 'pkcs8',
-                format: 'pem'
-            }
-        });
-
-        // Create SSL directory if it doesn't exist
-        const sslDir = path.join(__dirname, 'server', 'ssl');
-        if (!fs.existsSync(sslDir)) {
-            fs.mkdirSync(sslDir, { recursive: true });
-        }
-
-        // Write certificates securely
-        fs.writeFileSync(path.join(sslDir, 'key.pem'), privateKey);
-        fs.writeFileSync(path.join(sslDir, 'cert.pem'), cert.toString());
-
-        return { privateKey, cert: cert.toString() };
-    } catch (error) {
-        throw new Error(`Failed to generate certificates: ${error.message}`);
-    }
+    console.log('generateCertificatePair is not active in production setup.');
+    return {};
 }
 
 // Add health check endpoint
@@ -126,7 +63,7 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Start server with HTTPS
+// Start server with HTTP (Render handles HTTPS)
 const startServer = async () => {
     try {
         // Initialize Redis
@@ -135,40 +72,31 @@ const startServer = async () => {
         // Connect to MongoDB
         await connectDB();
 
-        // Generate certificates if they don't exist
-        if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-            await generateCertificatePair();
-        }
+        // No need to generate/read certificates for Render deployment
+        // if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
+        //     await generateCertificatePair();
+        // }
 
-        const options = {
-            key: fs.readFileSync(keyPath),
-            cert: fs.readFileSync(certPath)
-        };
-
-        const httpsServer = https.createServer(options, app);
+        // Create a plain HTTP server
+        const server = http.createServer(app);
         
-        const port = process.env.PORT || 8000;
+        const port = process.env.PORT || 8000; // Render will provide PORT
+        const host = '0.0.0.0'; // Bind to all interfaces for Render
         
         // Try to start the server
         try {
-            await httpsServer.listen(port);
-            console.log(`Server running on port ${port}`);
+            await server.listen(port, host, () => {
+                console.log(`Server running on http://${host}:${port} in ${process.env.NODE_ENV} mode`);
+            });
         } catch (error) {
-            if (error.code === 'EADDRINUSE') {
-                console.error(`Port ${port} is already in use. Trying port ${port + 1}`);
-                await httpsServer.listen(port + 1);
-                console.log(`Server running on port ${port + 1}`);
-            } else {
-                throw error;
-            }
+            console.error(`Failed to start server on ${host}:${port}:`, error);
+            process.exit(1);
         }
 
         // Error handling
-        httpsServer.on('error', (error) => {
-            console.error('Server error:', error);
-            if (error.code !== 'EADDRINUSE') {
-                throw error;
-            }
+        server.on('error', (error) => {
+            console.error('Server runtime error:', error);
+            process.exit(1); // Exit on server errors
         });
     } catch(error) {
         console.error('Server startup failed:', error);
