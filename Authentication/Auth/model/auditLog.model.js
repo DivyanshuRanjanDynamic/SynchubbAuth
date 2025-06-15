@@ -22,13 +22,17 @@ const auditLogSchema = new mongoose.Schema({
             'PROFILE_UPDATE',
             'SESSION_LIST',
             'ACCOUNT_DELETION',
-            'REVOKE_ALL_SESSIONS'
+            'REVOKE_ALL_SESSIONS',
+            'REGISTER_ATTEMPT',
+            'EMAIL_VERIFICATION_ATTEMPT',
+            'LOGIN_ATTEMPT',
+            'PASSWORD_RESET_ATTEMPT'
         ]
     },
     status: {
         type: String,
         required: true,
-        enum: ['SUCCESS', 'FAILURE']
+        enum: ['SUCCESS', 'FAILURE', 'PENDING']
     },
     ipAddress: {
         type: String,

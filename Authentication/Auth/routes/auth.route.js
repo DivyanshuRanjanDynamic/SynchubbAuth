@@ -14,7 +14,8 @@ import {
     getSessions,
     revokeSession,
     revokeAllSessions,
-    privacypolicy
+    privacypolicy,
+    resendVerificationCode
 } from "../controllers/auth.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 import { loginLimiter, apiLimiter } from '../middleware/rateLimiter.js';
@@ -31,6 +32,7 @@ import { checkRole } from '../middleware/rbac.js';
 import { securityHeaders } from '../middleware/securityHeaders.js';
 import passport from "passport";
 import { User } from "../model/user.model.js";
+import mongoose from "mongoose";
 
 const router = express.Router();
 
@@ -38,6 +40,43 @@ const router = express.Router();
 router.use(securityHeaders);
 
 // Public Routes
+router.get("/health", async (req, res) => {
+    try {
+        // Check MongoDB connection
+        const mongoStatus = mongoose.connection.readyState === 1 ? 'healthy' : 'unhealthy';
+        
+        // Check if the application is responding
+        const appStatus = 'healthy';
+        
+        // Determine overall status
+        const overallStatus = mongoStatus === 'healthy' && appStatus === 'healthy' ? 'healthy' : 'unhealthy';
+        
+        // Set appropriate status code
+        const statusCode = overallStatus === 'healthy' ? 200 : 503;
+        
+        res.status(statusCode).json({
+            status: overallStatus,
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+            services: {
+                mongodb: {
+                    status: mongoStatus,
+                    connectionState: mongoose.connection.readyState
+                },
+                application: {
+                    status: appStatus
+                }
+            }
+        });
+    } catch (error) {
+        res.status(503).json({
+            status: 'unhealthy',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
 router.post("/register", 
     apiLimiter, 
     validateRegister, 
@@ -52,9 +91,14 @@ router.post("/login",
     loginUser
 );
 
-router.get("/verify-email",
+router.post("/verify-email",
     apiLimiter,
     verifyEmail
+);
+
+router.post("/resend-verification",
+    apiLimiter,
+    resendVerificationCode
 );
 
 router.post("/forgot-password",
@@ -88,7 +132,7 @@ router.get("/google/callback",
     (req, res, next) => {
         console.log('Received Google callback');
         passport.authenticate("google", {
-            failureRedirect: `${process.env.CLIENT_URL}/login?error=google_auth_failed`,
+            failureRedirect: `${process.env.CLIENT_URL}/auth/login?error=google_auth_failed`,
             session: false
         })(req, res, next);
     },
@@ -109,12 +153,12 @@ router.get("/google/callback",
             };
             res.cookie('accessToken', token, options);
 
-            // Redirect to Home route
-            console.log('Redirecting to Home route');
-            res.redirect('/auth/Home');
+            // Redirect to dashboard
+            console.log('Redirecting to dashboard');
+            res.redirect(`${process.env.CLIENT_URL}/dashboard`);
         } catch (error) {
             console.error('OAuth callback error:', error);
-            res.redirect(`${process.env.CLIENT_URL}/login?error=oauth_error`);
+            res.redirect(`${process.env.CLIENT_URL}/auth/login?error=oauth_error`);
         }
     }
 );
@@ -132,7 +176,7 @@ router.get("/github/callback",
     (req, res, next) => {
         console.log('Received GitHub callback');
         passport.authenticate("github", {
-            failureRedirect: `${process.env.CLIENT_URL}/login?error=github_auth_failed`,
+            failureRedirect: `${process.env.CLIENT_URL}/auth/login?error=github_auth_failed`,
             session: false
         })(req, res, next);
     },
@@ -153,12 +197,12 @@ router.get("/github/callback",
             };
             res.cookie('accessToken', token, options);
 
-            // Redirect to Home route
-            console.log('Redirecting to Home route');
-            res.redirect('/auth/Home');
+            // Redirect to dashboard
+            console.log('Redirecting to dashboard');
+            res.redirect(`${process.env.CLIENT_URL}/dashboard`);
         } catch (error) {
             console.error('OAuth callback error:', error);
-            res.redirect(`${process.env.CLIENT_URL}/login?error=oauth_error`);
+            res.redirect(`${process.env.CLIENT_URL}/auth/login?error=oauth_error`);
         }
     }
 );

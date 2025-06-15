@@ -11,9 +11,14 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { emailService } from "../utils/emailService.js";
 import mongoose from "mongoose";
+import { TempUser } from "../model/tempUser.model.js";
 
+// Helper to generate 4-digit code
+const generateCode = () => {
+    return Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit string
+};
 
- export const generateAccessAndRefreshTokens = async (userId) => {
+export const generateAccessAndRefreshTokens = async (userId) => {
     try {
       const user = await User.findById(userId);
   
@@ -30,146 +35,230 @@ import mongoose from "mongoose";
       console.log( "Something went wrong while generating the access token");
   }
 };
-// Helper to generate 4-digit code
-const generateCode = () => {
-  return Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit string
-}
 
 // Register new user
 export const registerUser = asynchandler(async (req, res) => {
     const { username, email, password } = req.body;
 
-     // Validate request
+    // Validate request
     if (!username || !email || !password) {
         throw new ApiError(400, "Username, email and password are required");
     }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+    // Normalize email
+    const normalizedEmail = email.toLowerCase().replace(/\.(?=.*@gmail\.com)/g, '');
+    console.log('Starting registration process:', { 
+        originalEmail: email,
+        normalizedEmail: normalizedEmail,
+        username: username.toLowerCase()
+    });
+
+    try {
+        // Check if user already exists in main collection
+        const existingUser = await User.findOne({ 
+            $or: [
+                { email: normalizedEmail },
+                { email: email.toLowerCase() },
+                { username: username.toLowerCase() }
+            ]
+        });
         if (existingUser) {
+            console.log('User already exists in main collection:', existingUser.email);
             throw new ApiError(409, "User already exists");
         }
 
-  
+        const verificationCode = generateCode();
+        const verificationExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
-    // Generate verification token and send email
-    // const verificationToken = await EmailVerificationManager.generateVerificationToken(user);
-    // await EmailVerificationManager.sendVerificationEmail(user, verificationToken);/
-
-     const verificationCode = generateCode();
-    const verificationExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-
-
-      // Create new user
-        const user = await User.create({
-            username: username.toLowerCase(),
-            email,
-            password,
-            verificationCode,
-            verificationCodeExpires: verificationExpiry,
-            isVerified: false,
+        // Check if temporary user exists
+        let tempUser = await TempUser.findOne({ 
+            $or: [
+                { email: normalizedEmail },
+                { email: email.toLowerCase() },
+                { username: username.toLowerCase() }
+            ]
         });
-         // Send 4-digit code via email
-         console.log('User object:', user);
-console.log('User email:', user.email);
+        
+        if (tempUser) {
+            // Update existing temporary user
+            tempUser.verificationCode = verificationCode;
+            tempUser.verificationCodeExpires = verificationExpiry;
+            tempUser.password = password;
+            tempUser.plainPassword = password;
+            tempUser.verificationAttempts = 0;
+            await tempUser.save();
+        } else {
+            // Create new temporary user
+            tempUser = await TempUser.create({
+                username: username.toLowerCase(),
+                email: normalizedEmail,
+                password,
+                plainPassword: password,
+                verificationCode,
+                verificationCodeExpires: verificationExpiry,
+                isVerified: false,
+                verificationAttempts: 0
+            });
+        }
 
-  await EmailVerificationManager.sendVerificationEmail(user, `Your verification code is: ${verificationCode}`);
+        // Send verification email
+        const message = `
+            <h1>Verify Your Email</h1>
+            <p>Your verification code is: <b>${verificationCode}</b></p>
+            <p>This code will expire in 15 minutes.</p>
+            <p>If you didn't request this, please ignore this email.</p>
+        `;
+        await EmailVerificationManager.sendVerificationEmail(tempUser, message);
 
-    // Log registration
-    await AuditLog.create({
-        userId: user._id,
-        action: 'REGISTER',
-        status: 'SUCCESS',
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent')
-    });
+        // Log registration attempt
+        await AuditLog.create({
+            userId: tempUser._id,
+            action: 'REGISTER_ATTEMPT',
+            status: 'PENDING',
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent')
+        });
 
-    return res.status(201).json(
-        new ApiResponse(201, null, "Registration successful. Please check your email for 4-digit  verification code .")
-    );
+        return res.status(201).json(
+            new ApiResponse(201, null, "Registration initiated. Please check your email for verification code.")
+        );
+    } catch (error) {
+        console.error('Registration error:', error);
+        throw new ApiError(500, "Failed to complete registration process: " + error.message);
+    }
 });
 
 // Login user
 export const loginUser = asynchandler(async (req, res) => {
     const { email, password } = req.body;
 
-    // Find user
-    const user = await User.findOne({ email });
-    if (!user) {
-        throw new ApiError(401, "Invalid credentials");
+    if (!email || !password) {
+        throw new ApiError(400, "Email and password are required");
     }
 
-      // ✅ Check if email is verified
-    if (!user.isVerified) {
-        throw new ApiError(403, "Please verify your email before logging in");
-    }
+    const normalizedEmail = email.toLowerCase().replace(/\.(?=.*@gmail\.com)/g, '');
+    console.log('Login attempt:', {
+        originalEmail: email,
+        normalizedEmail: normalizedEmail,
+        timestamp: new Date().toISOString()
+    });
 
-    // Check if account is locked
-    if (user.isLocked()) {
-        throw new ApiError(423, "Account is locked. Please try again later.");
-    }
+    try {
+        // Find user
+        const user = await User.findOne({ 
+            $or: [
+                { email: normalizedEmail },
+                { email: email.toLowerCase() }
+            ]
+        });
+        
+        console.log('User lookup result:', {
+            found: user ? 'Yes' : 'No',
+            userId: user?._id,
+            email: user?.email,
+            isVerified: user?.isVerified,
+            isLocked: user?.isLocked?.() || false
+        });
 
-    // Verify password
-    const isPasswordValid = await user.comparePassword(password);
-    if (!isPasswordValid) {
-        await user.incrementLoginAttempts();
-        throw new ApiError(401, "Invalid credentials");
-    }
+        if (!user) {
+            console.log('Login failed: User not found');
+            throw new ApiError(401, "Invalid credentials");
+        }
 
-    // Reset login attempts
-    await user.resetLoginAttempts();
+        if (!user.isVerified) {
+            console.log('Login failed: Email not verified');
+            throw new ApiError(403, "Please verify your email before logging in");
+        }
 
-    // Update last login
-    user.lastLogin = new Date();
-    user.lastLoginIp = req.ip;
-    await user.save();
+        if (user.isLocked()) {
+            console.log('Login failed: Account locked');
+            throw new ApiError(423, "Account is locked. Please try again later.");
+        }
+
+        // Verify password
+        console.log('Attempting password verification');
+        const isPasswordValid = await user.comparePassword(password);
+        console.log('Password verification result:', { isValid: isPasswordValid });
+
+        if (!isPasswordValid) {
+            console.log('Login failed: Invalid password');
+            await user.incrementLoginAttempts();
+            throw new ApiError(401, "Invalid credentials");
+        }
+
+        // Reset login attempts
+        await user.resetLoginAttempts();
+        console.log('Login attempts reset');
+
+        // Update last login
+        user.lastLogin = new Date();
+        user.lastLoginIp = req.ip;
+        await user.save();
+        console.log('Last login updated');
 
         // Generate tokens
-    const { accessToken, refreshToken } = await TokenManager.generateTokens(user);
+        console.log('Generating tokens');
+        const { accessToken, refreshToken } = await TokenManager.generateTokens(user);
 
-    // Create session
-    const session = new Session({
-        userId: user._id,
-        deviceInfo: {
-            deviceType: req.get('User-Agent'),
-            ipAddress: req.ip
-        },
-        refreshToken,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    });
-    await session.save();
+        // Create session
+        const session = new Session({
+            userId: user._id,
+            deviceInfo: {
+                deviceType: req.get('User-Agent'),
+                ipAddress: req.ip
+            },
+            refreshToken,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        });
+        await session.save();
+        console.log('Session created');
 
-    // Log successful login
-    await AuditLog.create({
-        userId: user._id,
-        action: 'LOGIN',
-        status: 'SUCCESS',
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent')
-    });
+        // Log successful login
+        await AuditLog.create({
+            userId: user._id,
+            action: 'LOGIN',
+            status: 'SUCCESS',
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent')
+        });
 
-    // Set cookies
-    const options = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production'
-    };
+        // Set cookies
+        const options = {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production'
+        };
 
-    return res
-        .status(200)
-        .cookie("accessToken", accessToken, options)
-        .cookie("refreshToken", refreshToken, options)
-        .json(
-            new ApiResponse(200, {
-                user: {
-                    id: user._id,
-                    username: user.username,
-                    email: user.email,
-                    role: user.role
-                },
-                accessToken,
-                refreshToken
-            }, "Login successful")
-        );
+        console.log('Login successful:', {
+            userId: user._id,
+            email: user.email,
+            timestamp: new Date().toISOString()
+        });
+
+        return res
+            .status(200)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", refreshToken, options)
+            .json(
+                new ApiResponse(200, {
+                    user: {
+                        id: user._id,
+                        username: user.username,
+                        email: user.email,
+                        role: user.role
+                    },
+                    accessToken,
+                    refreshToken
+                }, "Login successful")
+            );
+    } catch (error) {
+        console.error('Login error:', {
+            error: error.message,
+            stack: error.stack,
+            email: normalizedEmail,
+            timestamp: new Date().toISOString()
+        });
+        throw error;
+    }
 });
 
 // Logout user
@@ -363,7 +452,7 @@ export const deleteAccount = asynchandler(async (req, res) => {
 });
 
 
-// Verify email
+// Verify email and complete registration
 export const verifyEmail = asynchandler(async (req, res) => {
     const { email, code } = req.body;
 
@@ -371,48 +460,87 @@ export const verifyEmail = asynchandler(async (req, res) => {
         throw new ApiError(400, "Email and verification code are required");
     }
 
-    const normalizedEmail = email.toLowerCase();
-    const user = await User.findOne({ email: normalizedEmail });
+    const normalizedEmail = email.toLowerCase().replace(/\.(?=.*@gmail\.com)/g, '');
 
-    if (!user || !user.emailVerification) {
-        throw new ApiError(400, "Invalid or expired verification");
+    try {
+        // Check if user already exists
+        const existingUser = await User.findOne({ 
+            $or: [
+                { email: normalizedEmail },
+                { email: email.toLowerCase() }
+            ]
+        });
+        
+        if (existingUser) {
+            throw new ApiError(409, "User already exists");
+        }
+
+        // Find temporary user
+        const tempUser = await TempUser.findOne({ 
+            $or: [
+                { email: normalizedEmail },
+                { email: email.toLowerCase() }
+            ]
+        });
+        
+        if (!tempUser) {
+            throw new ApiError(400, "No pending verification found for this email. Please register first.");
+        }
+
+        // Check verification attempts
+        if (tempUser.hasExceededVerificationAttempts()) {
+            await TempUser.deleteOne({ _id: tempUser._id });
+            throw new ApiError(429, "Too many verification attempts. Please register again.");
+        }
+
+        // Check if code has expired
+        if (Date.now() > new Date(tempUser.verificationCodeExpires).getTime()) {
+            await tempUser.incrementVerificationAttempts();
+            throw new ApiError(410, "Verification code expired. Please request a new code.");
+        }
+
+        // Verify the code
+        if (code !== tempUser.verificationCode) {
+            await tempUser.incrementVerificationAttempts();
+            throw new ApiError(400, "Invalid verification code");
+        }
+
+        // Create permanent user
+        const user = new User({
+            username: tempUser.username,
+            email: normalizedEmail,
+            password: tempUser.plainPassword,
+            isVerified: true
+        });
+
+        await user.save();
+
+        // Verify password was properly hashed
+        const isPasswordValid = await user.comparePassword(tempUser.plainPassword);
+        if (!isPasswordValid) {
+            await User.deleteOne({ _id: user._id });
+            throw new ApiError(500, "Failed to create user account. Please try again.");
+        }
+
+        // Delete temporary user
+        await TempUser.deleteOne({ _id: tempUser._id });
+
+        // Log successful verification
+        await AuditLog.create({
+            userId: user._id,
+            action: 'REGISTER',
+            status: 'SUCCESS',
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent')
+        });
+
+        return res.status(200).json(
+            new ApiResponse(200, null, "Email verified successfully. Registration completed.")
+        );
+    } catch (error) {
+        console.error('Verification error:', error);
+        throw error;
     }
-
-    if (user.isVerified) {
-        throw new ApiError(400, "Email already verified");
-    }
-
-      const savedCode = user.verificationCode;
-     const expiresAt = user.verificationCodeExpires;
-    
-      
-    if (Date.now() > new Date(expiresAt).getTime()) {
-        throw new ApiError(410, "Verification code expired");
-    }
-
-    console.log(savedCode);
-     console.log(code);
-    if (code !== savedCode) {
-        throw new ApiError(400, "Invalid verification code");
-    }
-
-    user.isVerified = true;
-      user.verificationCode = undefined;
-     user.verificationCodeExpires = undefined;
-    await user.save();
-
-    // Audit log
-    await AuditLog.create({
-        userId: user._id,
-        action: 'EMAIL_VERIFICATION',
-        status: 'SUCCESS',
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent')
-    });
-
-    return res.status(200).json(
-        new ApiResponse(200, null, "Email verified successfully")
-    );
 });
 
 // Forgot Password
@@ -850,6 +978,47 @@ export const privacypolicy = asynchandler(async (req, res) => {
         new ApiResponse(200, {
             policy: "Your privacy policy content here"
         }, "Privacy policy retrieved successfully")
+    );
+});
+
+// Resend verification code
+export const resendVerificationCode = asynchandler(async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        throw new ApiError(400, "Email is required");
+    }
+
+    const normalizedEmail = email.toLowerCase();
+    const tempUser = await TempUser.findOne({ email: normalizedEmail });
+
+    if (!tempUser) {
+        throw new ApiError(404, "No pending verification found for this email");
+    }
+
+    // Generate new verification code
+    const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
+    const verificationExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    // Update temporary user with new code
+    tempUser.verificationCode = verificationCode;
+    tempUser.verificationCodeExpires = verificationExpiry;
+    await tempUser.save();
+
+    // Send new verification email
+    await EmailVerificationManager.sendVerificationEmail(tempUser, `Your new verification code is: ${verificationCode}`);
+
+    // Log resend attempt
+    await AuditLog.create({
+        userId: tempUser._id,
+        action: 'EMAIL_VERIFICATION_ATTEMPT',
+        status: 'SUCCESS',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+    });
+
+    return res.status(200).json(
+        new ApiResponse(200, null, "New verification code sent successfully")
     );
 });
  

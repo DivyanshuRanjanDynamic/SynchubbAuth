@@ -17,9 +17,6 @@ class EmailService {
             auth: {
                 user: process.env.EMAIL_USERNAME,
                 pass: process.env.EMAIL_PASSWORD
-            },
-            tls: {
-                rejectUnauthorized: false
             }
         });
 
@@ -43,21 +40,20 @@ class EmailService {
             console.log('From:', process.env.EMAIL_USERNAME);
 
             const mailOptions = {
-                from: process.env.EMAIL_USERNAME,
+                from: `"Synchubb Auth" <${process.env.EMAIL_USERNAME}>`,
                 to: options.to,
                 subject: options.subject,
                 html: options.html
             };
 
             console.log('Mail options:', {
-                ...mailOptions,
                 from: mailOptions.from,
                 to: mailOptions.to,
                 subject: mailOptions.subject
             });
 
             const info = await this.transporter.sendMail(mailOptions);
-            console.log('Email sent successfully:', info.messageId);
+            console.log('Email sent successfully to:', options.to);
             return info;
         } catch (error) {
             console.error('Error sending email:', error);
@@ -68,18 +64,10 @@ class EmailService {
         }
     }
 
-    async sendVerificationEmail(user, token) {
-          if (!user || !user.email) {
-        throw new Error('User or user.email is missing when sending verification email');
-    }
-        const verificationUrl = `${process.env.CLIENT_URL}/verify-email/${token}`;
-        const message = `
-            <h1>Email Verification</h1>
-            <p>Please verify your email by clicking the link below:</p>
-            <a href="${verificationUrl}" target="_blank">Verify Email</a>
-            <p>This link will expire in 24 hours.</p>
-            <p>If you didn't request this, please ignore this email.</p>
-        `;
+    async sendVerificationEmail(user, message) {
+        if (!user || !user.email) {
+            throw new Error('User or user.email is missing when sending verification email');
+        }
 
         await this.sendEmail({
             to: user.email,
@@ -88,8 +76,11 @@ class EmailService {
         });
     }
 
-    async sendPasswordResetEmail(user, token) {
-        const resetUrl = `${process.env.CLIENT_URL}/reset-password/${token}`;
+    async sendPasswordResetEmail(user, resetUrl) {
+        if (!user || !user.email) {
+            throw new Error('User or user.email is missing when sending password reset email');
+        }
+
         const message = `
             <h1>Password Reset Request</h1>
             <p>You requested a password reset. Click the link below to reset your password:</p>

@@ -20,35 +20,23 @@ class EmailVerificationManager {
         }
     }
    // Sends verification email with 4-digit code and saves code + expiry in DB
-    static async sendVerificationEmail(user, accessToken) {
-          try {
-        if (!user  || !user.email) {
-            throw new ApiError(400, 'User is required');
+    static async sendVerificationEmail(user, message) {
+        try {
+            if (!user || !user.email) {
+                throw new ApiError(400, 'User or user email is missing');
+            }
+
+            console.log('Sending verification email to:', user.email);
+            await emailService.sendEmail({
+                to: user.email,
+                subject: 'Your Verification Code',
+                html: message
+            });
+            console.log('Verification email sent successfully to:', user.email);
+        } catch (error) {
+            console.error('Error sending verification email:', error);
+            throw new ApiError(500, 'Failed to send verification email');
         }
-
-        // 1. Generate 4-digit code
-        const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
-
-
-         // Save code and expiry in user document
-            user.verificationCode = verificationCode;
-            user.verificationCodeExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
-
-        await user.save();
-
-        // 3. Send email with the 4-digit code  or the passed message
-      await emailService.sendEmail({
-        to: user.email,
-       subject: 'Your Verification Code',
-        html: `<h1>Verify Your Email</h1><p>Your verification code is: <b>${verificationCode}</b></p>`
-});
-
-        
-    }
-     catch (error) {
-        console.error('Error sending verification email:', error);
-        throw new ApiError(500, 'Failed to send verification email');
-    }
     }
 
     static async verifyEmail(token) {
