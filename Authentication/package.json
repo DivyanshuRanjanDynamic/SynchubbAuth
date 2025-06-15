@@ -4,8 +4,8 @@
   "description": "Authentication API",
   "main": "Auth/handleServerAndDatabase.js",
   "scripts": {
-    "start": "node --experimental-specifier-resolution=node Auth/handleServerAndDatabase.js",
-    "dev": "nodemon --experimental-specifier-resolution=node Auth/handleServerAndDatabase.js"
+    "start": "node  Auth/handleServerAndDatabase.js",
+    "dev": "nodemon  Auth/handleServerAndDatabase.js"
   },
   "keywords": [
     "auth",
