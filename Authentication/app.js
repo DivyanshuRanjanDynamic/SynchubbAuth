@@ -11,6 +11,9 @@ import { Strategy as GitHubStrategy } from 'passport-github2';
 import authRoutes from './Auth/routes/auth.route.js';
 import mongoose from 'mongoose';
 import helmet from 'helmet';
+import { User } from './Auth/model/user.model.js'; // Import User model
+import { TokenManager } from './Auth/utils/tokenManager.js'; // Import TokenManager
+import './Auth/passport.js'; // Import and execute the passport configuration
 
 // Constants
 export const DBNAME = 'AuthenticationSynchubbDb';
@@ -71,56 +74,116 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Passport configuration
-passport.use(
-    new GoogleStrategy(
-        {
-            clientID: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            callbackURL: `${process.env.SERVER_URL}/google/callback`,
-            scope: ['profile', 'email']
-        },
-        async (accessToken, refreshToken, profile, done) => {
-            try {
-                console.log('Google OAuth callback received');
-                return done(null, profile);
-            } catch (error) {
-                console.error('Google OAuth error:', error);
-                return done(error, null);
-            }
-        }
-    )
-);
-
-passport.use(
-    new GitHubStrategy(
-        {
-            clientID: process.env.GITHUB_CLIENT_ID,
-            clientSecret: process.env.GITHUB_CLIENT_SECRET,
-            callbackURL: `${process.env.SERVER_URL}/github/callback`,
-            scope: ['user:email']
-        },
-        async (accessToken, refreshToken, profile, done) => {
-            try {
-                console.log('GitHub OAuth callback received');
-                return done(null, profile);
-            } catch (error) {
-                console.error('GitHub OAuth error:', error);
-                return done(error, null);
-            }
-        }
-    )
-);
-
 // Serialize user
 passport.serializeUser((user, done) => {
-    done(null, user);
+    done(null, user.id);
 });
 
 // Deserialize user
-passport.deserializeUser((user, done) => {
-    done(null, user);
+passport.deserializeUser(async (id, done) => {
+    try {
+        const user = await User.findById(id);
+        done(null, user);
+    } catch (err) {
+        done(err, null);
+    }
 });
+
+// OAuth Authentication Routes (Moved from auth.route.js to root level)
+app.get("/google",
+    (req, res, next) => {
+        console.log('Initiating Google OAuth flow');
+        passport.authenticate("google", { 
+            scope: ["profile", "email"],
+            prompt: "select_account"
+        })(req, res, next);
+    }
+);
+
+app.get("/google/callback",
+    (req, res, next) => {
+        console.log('--- ENTERING GOOGLE CALLBACK ROUTE HANDLER ---');
+        console.log('Received Google callback');
+        passport.authenticate("google", {
+            failureRedirect: `${process.env.CLIENT_URL}/auth/login?error=google_auth_failed`,
+            session: false // Crucial for stateless API usage
+        })(req, res, next);
+    },
+    async (req, res) => {
+        try {
+            console.log('Processing Google callback');
+            const user = await User.findOrCreateOAuthUser(req.user, 'google');
+            const token = user.generateAccessToken();
+            
+            // Update last login
+            user.lastLogin = new Date();
+            await user.save();
+
+            // Set auth token in cookie
+            const options = {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+                domain: process.env.NODE_ENV === 'production' ? '.synchubb.in' : undefined
+            };
+            res.cookie('accessToken', token, options);
+
+            // Redirect to dashboard (or wherever your frontend expects after login)
+            console.log('Redirecting to dashboard');
+            res.redirect(`${process.env.CLIENT_URL}/dashboard/home`);
+        } catch (error) {
+            console.error('OAuth callback error:', error);
+            res.redirect(`${process.env.CLIENT_URL}/auth/login?error=oauth_error`);
+        }
+    }
+);
+
+app.get("/github",
+    (req, res, next) => {
+        console.log('Initiating GitHub OAuth flow');
+        passport.authenticate("github", {
+            scope: ["user:email"]
+        })(req, res, next);
+    }
+);
+
+app.get("/github/callback",
+    (req, res, next) => {
+        console.log('--- ENTERING GITHUB CALLBACK ROUTE HANDLER ---');
+        console.log('Received GitHub callback');
+        passport.authenticate("github", {
+            failureRedirect: `${process.env.CLIENT_URL}/auth/login?error=github_auth_failed`,
+            session: false // Crucial for stateless API usage
+        })(req, res, next);
+    },
+    async (req, res) => {
+        try {
+            console.log('Processing GitHub callback');
+            const user = await User.findOrCreateOAuthUser(req.user, 'github');
+            const token = user.generateAccessToken();
+            
+            // Update last login
+            user.lastLogin = new Date();
+            await user.save();
+
+            // Set auth token in cookie
+            const options = {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+                domain: process.env.NODE_ENV === 'production' ? '.synchubb.in' : undefined
+            };
+            res.cookie('accessToken', token, options);
+
+            // Redirect to dashboard
+            console.log('Redirecting to dashboard');
+            res.redirect(`${process.env.CLIENT_URL}/dashboard/home`);
+        } catch (error) {
+            console.error('OAuth callback error:', error);
+            res.redirect(`${process.env.CLIENT_URL}/auth/login?error=oauth_error`);
+        }
+    }
+);
 
 // Routes
 app.use("/auth", authRoutes);
