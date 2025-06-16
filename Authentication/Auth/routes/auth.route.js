@@ -118,94 +118,98 @@ router.post("/reset-password/:token",
 router.get("/privacy-policy", privacypolicy);
 
 // Social Authentication Routes
-// router.get("/google",
-//     (req, res, next) => {
-//         console.log('Initiating Google OAuth flow');
-//         passport.authenticate("google", { 
-//             scope: ["profile", "email"],
-//             prompt: "select_account"
-//         })(req, res, next);
-//     }
-// );
+router.get("/google",
+    (req, res, next) => {
+        console.log('Initiating Google OAuth flow');
+        passport.authenticate("google", { 
+            scope: ["profile", "email"],
+            prompt: "select_account"
+        })(req, res, next);
+    }
+);
 
-// router.get("/google/callback",
-//     (req, res, next) => {
-//         console.log('Received Google callback');
-//         passport.authenticate("google", {
-//             failureRedirect: `${process.env.CLIENT_URL}/auth/login?error=google_auth_failed`,
-//             session: false
-//         })(req, res, next);
-//     },
-//     async (req, res) => {
-//         try {
-//             console.log('Processing Google callback');
-//             const user = await User.findOrCreateOAuthUser(req.user, 'google');
-//             const token = user.generateAccessToken();
+router.get("/google/callback",
+    (req, res, next) => {
+        console.log('Received Google callback');
+        passport.authenticate("google", {
+            failureRedirect: `${process.env.CLIENT_URL || 'https://www.synchubb.in'}/auth/login?error=google_auth_failed`,
+            session: false
+        })(req, res, next);
+    },
+    async (req, res) => {
+        try {
+            console.log('Processing Google callback');
+            const user = await User.findOrCreateOAuthUser(req.user, 'google');
+            const token = user.generateAccessToken();
             
-//             // Update last login
-//             user.lastLogin = new Date();
-//             await user.save();
+            // Update last login
+            user.lastLogin = new Date();
+            await user.save();
 
-//             // Set auth token in cookie
-//             const options = {
-//                 httpOnly: true,
-//                 secure: process.env.NODE_ENV === 'production'
-//             };
-//             res.cookie('accessToken', token, options);
+            // Set auth token in cookie
+            const options = {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+                domain: process.env.NODE_ENV === 'production' ? '.synchubb.in' : undefined
+            };
+            res.cookie('accessToken', token, options);
 
-//             // Redirect to dashboard
-//             console.log('Redirecting to dashboard');
-//             res.redirect(`${process.env.CLIENT_URL}/dashboard`);
-//         } catch (error) {
-//             console.error('OAuth callback error:', error);
-//             res.redirect(`${process.env.CLIENT_URL}/auth/login?error=oauth_error`);
-//         }
-//     }
-// );
+            // Redirect to dashboard
+            console.log('Redirecting to dashboard');
+            res.redirect(`${process.env.CLIENT_URL || 'https://www.synchubb.in'}/dashboard/home`);
+        } catch (error) {
+            console.error('OAuth callback error:', error);
+            res.redirect(`${process.env.CLIENT_URL || 'https://www.synchubb.in'}/auth/login?error=oauth_error`);
+        }
+    }
+);
 
-// router.get("/github",
-//     (req, res, next) => {
-//         console.log('Initiating GitHub OAuth flow');
-//         passport.authenticate("github", {
-//             scope: ["user:email"]
-//         })(req, res, next);
-//     }
-// );
+router.get("/github",
+    (req, res, next) => {
+        console.log('Initiating GitHub OAuth flow');
+        passport.authenticate("github", {
+            scope: ["user:email"]
+        })(req, res, next);
+    }
+);
 
-// router.get("/github/callback",
-//     (req, res, next) => {
-//         console.log('Received GitHub callback');
-//         passport.authenticate("github", {
-//             failureRedirect: `${process.env.CLIENT_URL}/auth/login?error=github_auth_failed`,
-//             session: false
-//         })(req, res, next);
-//     },
-//     async (req, res) => {
-//         try {
-//             console.log('Processing GitHub callback');
-//             const user = await User.findOrCreateOAuthUser(req.user, 'github');
-//             const token = user.generateAccessToken();
+router.get("/github/callback",
+    (req, res, next) => {
+        console.log('Received GitHub callback');
+        passport.authenticate("github", {
+            failureRedirect: `${process.env.CLIENT_URL || 'https://www.synchubb.in'}/auth/login?error=github_auth_failed`,
+            session: false
+        })(req, res, next);
+    },
+    async (req, res) => {
+        try {
+            console.log('Processing GitHub callback');
+            const user = await User.findOrCreateOAuthUser(req.user, 'github');
+            const token = user.generateAccessToken();
             
-//             // Update last login
-//             user.lastLogin = new Date();
-//             await user.save();
+            // Update last login
+            user.lastLogin = new Date();
+            await user.save();
 
-//             // Set auth token in cookie
-//             const options = {
-//                 httpOnly: true,
-//                 secure: process.env.NODE_ENV === 'production'
-//             };
-//             res.cookie('accessToken', token, options);
+            // Set auth token in cookie
+            const options = {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+                domain: process.env.NODE_ENV === 'production' ? '.synchubb.in' : undefined
+            };
+            res.cookie('accessToken', token, options);
 
-//             // Redirect to dashboard
-//             console.log('Redirecting to dashboard');
-//             res.redirect(`${process.env.CLIENT_URL}/dashboard`);
-//         } catch (error) {
-//             console.error('OAuth callback error:', error);
-//             res.redirect(`${process.env.CLIENT_URL}/auth/login?error=oauth_error`);
-//         }
-//     }
-// );
+            // Redirect to dashboard
+            console.log('Redirecting to dashboard');
+            res.redirect(`${process.env.CLIENT_URL || 'https://www.synchubb.in'}/dashboard/home`);
+        } catch (error) {
+            console.error('OAuth callback error:', error);
+            res.redirect(`${process.env.CLIENT_URL || 'https://www.synchubb.in'}/auth/login?error=oauth_error`);
+        }
+    }
+);
 
 // Protected Routes (require authentication)
 router.use(verifyJWT);

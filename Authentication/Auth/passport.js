@@ -6,18 +6,23 @@ import { User } from "./model/user.model.js";
 
 dotenv.config();
 
-
-
 // Using Passport for Google Authentication
 passport.use(
     new GoogleStrategy(
         {
             clientID: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            callbackURL: `${process.env.SERVER_URL}/google/callback`,
+            callbackURL: `${process.env.SERVER_URL}/auth/google/callback`,
+            proxy: true
         },
         async (accessToken, refreshToken, profile, done) => {
             try {
+                console.log('Google OAuth profile:', {
+                    id: profile.id,
+                    email: profile.emails?.[0]?.value,
+                    displayName: profile.displayName
+                });
+
                 let user = await User.findOne({ googleId: profile.id });
 
                 if (!user) {
@@ -29,10 +34,12 @@ passport.use(
                         isVerified: true,
                     });
                     await user.save();
+                    console.log('Created new user from Google OAuth:', user.email);
                 }
 
                 return done(null, user);
             } catch (error) {
+                console.error('Google OAuth error:', error);
                 return done(error, null);
             }
         }
@@ -45,11 +52,18 @@ passport.use(
         {
             clientID: process.env.GITHUB_CLIENT_ID,
             clientSecret: process.env.GITHUB_CLIENT_SECRET,
-            callbackURL: `${process.env.SERVER_URL}/github/callback`,
-            scope: ["user:email"],
+            callbackURL: `${process.env.SERVER_URL}/auth/github/callback`,
+            proxy: true,
+            scope: ["user:email"]
         },
         async (accessToken, refreshToken, profile, done) => {
             try {
+                console.log('GitHub OAuth profile:', {
+                    id: profile.id,
+                    username: profile.username,
+                    email: profile.emails?.[0]?.value
+                });
+
                 let user = await User.findOne({ githubId: profile.id });
 
                 if (!user) {
@@ -61,10 +75,12 @@ passport.use(
                         isVerified: true,
                     });
                     await user.save();
+                    console.log('Created new user from GitHub OAuth:', user.email);
                 }
 
                 return done(null, user);
             } catch (error) {
+                console.error('GitHub OAuth error:', error);
                 return done(error, null);
             }
         }
