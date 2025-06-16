@@ -17,19 +17,22 @@ passport.use(
         },
         async (accessToken, refreshToken, profile, done) => {
             try {
-                console.log('Google OAuth profile:', {
-                    id: profile.id,
-                    email: profile.emails?.[0]?.value,
-                    displayName: profile.displayName
-                });
+                // Defensive extraction
+                const email = profile.emails && profile.emails[0] && profile.emails[0].value;
+                const username = profile.displayName || (email ? email.split('@')[0] : undefined);
+
+                if (!email) {
+                    // Fail gracefully if email is missing
+                    console.error('Google OAuth error: No email found in Google profile');
+                    return done(new Error('No email found in Google profile'), null);
+                }
 
                 let user = await User.findOne({ googleId: profile.id });
 
                 if (!user) {
                     // Check if user exists with the same email
-                    const existingUser = await User.findOne({ email: profile.emails[0].value });
+                    const existingUser = await User.findOne({ email });
                     if (existingUser) {
-                        // Link Google account to existing user
                         existingUser.googleId = profile.id;
                         if (!existingUser.profilePic) {
                             existingUser.profilePic = profile.photos?.[0]?.value || "";
@@ -41,8 +44,8 @@ passport.use(
                     // Create new user
                     user = new User({
                         googleId: profile.id,
-                        email: profile.emails[0].value,
-                        username: profile.displayName,
+                        email,
+                        username,
                         profilePic: profile.photos?.[0]?.value || "",
                         isVerified: true,
                     });
@@ -71,35 +74,38 @@ passport.use(
         },
         async (accessToken, refreshToken, profile, done) => {
             try {
-                console.log('GitHub OAuth profile:', {
-                    id: profile.id,
-                    username: profile.username,
-                    email: profile.emails?.[0]?.value
-                });
+                // Defensive extraction
+                let email;
+                if (profile.emails && profile.emails.length > 0) {
+                    // Prefer verified email if available
+                    email = profile.emails.find(e => e.verified) ? profile.emails.find(e => e.verified).value : profile.emails[0].value;
+                }
+                const username = profile.username || (email ? email.split('@')[0] : undefined);
+
+                if (!email) {
+                    console.error('GitHub OAuth error: No email found in GitHub profile');
+                    return done(new Error('No email found in GitHub profile'), null);
+                }
 
                 let user = await User.findOne({ githubId: profile.id });
 
                 if (!user) {
                     // Check if user exists with the same email
-                    const email = profile.emails?.[0]?.value;
-                    if (email) {
-                        const existingUser = await User.findOne({ email });
-                        if (existingUser) {
-                            // Link GitHub account to existing user
-                            existingUser.githubId = profile.id;
-                            if (!existingUser.profilePic) {
-                                existingUser.profilePic = profile.photos?.[0]?.value || "";
-                            }
-                            await existingUser.save();
-                            return done(null, existingUser);
+                    const existingUser = await User.findOne({ email });
+                    if (existingUser) {
+                        existingUser.githubId = profile.id;
+                        if (!existingUser.profilePic) {
+                            existingUser.profilePic = profile.photos?.[0]?.value || "";
                         }
+                        await existingUser.save();
+                        return done(null, existingUser);
                     }
 
                     // Create new user
                     user = new User({
                         githubId: profile.id,
-                        username: profile.username,
-                        email: profile.emails?.[0]?.value || "",
+                        username,
+                        email,
                         profilePic: profile.photos?.[0]?.value || "",
                         isVerified: true,
                     });
