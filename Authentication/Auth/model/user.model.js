@@ -125,16 +125,16 @@ userSchema.statics.findOrCreateOAuthUser = async function(profile, provider) {
 
         // 3. If still not found, create a new user
         console.log(`[OAuth - ${provider}] Creating new user with email:`, normalizedEmail || profile.username);
-        const userData = {
+            const userData = {
             [providerIdField]: profile.id,
             email: normalizedEmail,
-            username: provider === 'google' ? profile.displayName : profile.username,
-            profilePic: profile.photos?.[0]?.value || "",
-            isVerified: true // OAuth users are automatically verified
-        };
-        
-        user = new this(userData);
-        await user.save();
+                username: provider === 'google' ? profile.displayName : profile.username,
+                profilePic: profile.photos?.[0]?.value || "",
+                isVerified: true // OAuth users are automatically verified
+            };
+            
+            user = new this(userData);
+            await user.save();
         
         console.log(`[OAuth - ${provider}] New user created:`, user.email);
         return user;
@@ -198,10 +198,10 @@ userSchema.methods.generateRefreshToken = function() {
 // Method to generate password reset token
 userSchema.methods.generatePasswordResetToken = function() {
     const resetToken = crypto.randomBytes(32).toString('hex');
-
+    
     this.passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
     this.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
-
+    
     return resetToken;
 };
 
