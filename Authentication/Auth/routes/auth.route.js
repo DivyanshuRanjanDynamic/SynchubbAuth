@@ -121,6 +121,8 @@ router.get("/privacy-policy", privacypolicy);
 router.get("/google",
     (req, res, next) => {
         console.log('Initiating Google OAuth flow');
+        console.log('Request headers:', req.headers);
+        console.log('Request cookies:', req.cookies);
         passport.authenticate("google", { 
             scope: ["profile", "email"],
             prompt: "select_account"
@@ -131,6 +133,8 @@ router.get("/google",
 router.get("/google/callback",
     (req, res, next) => {
         console.log('Received Google callback');
+        console.log('Callback query params:', req.query);
+        console.log('Callback headers:', req.headers);
         passport.authenticate("google", {
             failureRedirect: `${process.env.CLIENT_URL || 'https://www.synchubb.in'}/auth/login?error=google_auth_failed`,
             session: false
@@ -139,6 +143,7 @@ router.get("/google/callback",
     async (req, res) => {
         try {
             console.log('Processing Google callback');
+            console.log('User from passport:', req.user);
             const user = await User.findOrCreateOAuthUser(req.user, 'google');
             const token = user.generateAccessToken();
             
@@ -153,6 +158,7 @@ router.get("/google/callback",
                 sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
                 domain: process.env.NODE_ENV === 'production' ? '.synchubb.in' : undefined
             };
+            console.log('Setting cookie with options:', options);
             res.cookie('accessToken', token, options);
 
             // Redirect to dashboard

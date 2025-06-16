@@ -47,12 +47,10 @@ app.use(express.urlencoded({ extended: true }));
 
 // CORS configuration
 app.use(cors({
-    origin: [env.CLIENT_URL, 'https://www.synchubb.in','http://localhost:5173', 
-        'http://127.0.0.1:5173'],
+    origin: process.env.CLIENT_URL || 'https://www.synchubb.in',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    exposedHeaders: ['Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
 }));
 
 // Session configuration
@@ -65,7 +63,7 @@ app.use(
             secure: process.env.NODE_ENV === 'production',
             maxAge: 24 * 60 * 60 * 1000, // 24 hours
             sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-            domain: process.env.NODE_ENV === 'production' ? 'synchubb.in' : undefined
+            domain: process.env.NODE_ENV === 'production' ? '.synchubb.in' : undefined
         },
         name: 'synchubb.sid'
     })
