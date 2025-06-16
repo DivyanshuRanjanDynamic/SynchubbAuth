@@ -75,48 +75,51 @@ userSchema.statics.findOrCreateOAuthUser = async function(profile, provider) {
     try {
         let user;
         const providerIdField = provider === 'google' ? 'googleId' : 'githubId';
-        let emailFromProfile = profile.emails?.[0]?.value || "";
+        // Use the email and username directly from the profile argument
+        const emailFromProfile = profile.email || profile.emails?.[0]?.value || "";
+        const usernameFromProfile = profile.username || profile.displayName || (emailFromProfile ? emailFromProfile.split('@')[0] : undefined);
+        const profileId = profile[providerIdField] || profile.id;
+        const profilePic = profile.profilePic || (profile.photos?.[0]?.value || "");
 
-        // Normalize email from profile consistently, similar to how it's handled in registration/login
+        // Normalize email
         let normalizedEmail = emailFromProfile;
         if (emailFromProfile) {
             normalizedEmail = emailFromProfile.toLowerCase().replace(/\.(?=.*@gmail\.com)/g, '');
         }
 
         console.log(`[OAuth - ${provider}] Attempting to find user:`, {
-            profileId: profile.id,
+            profileId,
             providerIdField,
             emailFromProfile,
             normalizedEmail
         });
 
+        // Defensive: If no email or username, fail early
+        if (!normalizedEmail || !usernameFromProfile) {
+            console.error(`[OAuth - ${provider}] Missing required fields:`, { normalizedEmail, usernameFromProfile });
+            throw new Error('Email and username are required for OAuth user creation');
+        }
+
         // 1. Try to find existing user by provider ID
-        user = await this.findOne({ [providerIdField]: profile.id });
-        
+        user = await this.findOne({ [providerIdField]: profileId });
         if (user) {
             console.log(`[OAuth - ${provider}] Found existing user by ${provider} ID:`, user.email);
             return user;
         }
 
         // 2. If not found by provider ID, try to find by email
-        if (emailFromProfile) {
-            console.log(`[OAuth - ${provider}] Attempting to find user by email:`, {
-                normalizedEmail: normalizedEmail,
-                plainLowercaseEmail: emailFromProfile.toLowerCase()
-            });
+        if (normalizedEmail) {
             user = await this.findOne({
                 $or: [
                     { email: normalizedEmail },
-                    { email: emailFromProfile.toLowerCase() } // Use plain lowercase as fallback
+                    { email: emailFromProfile.toLowerCase() }
                 ]
             });
             if (user) {
                 console.log(`[OAuth - ${provider}] Found existing user by email, linking ${provider} ID:`, user.email);
-                // Link the OAuth ID to the existing user
-                user[providerIdField] = profile.id;
-                // Ensure other fields are updated if necessary (e.g., profile pic from OAuth)
-                if (!user.profilePic && profile.photos?.[0]?.value) {
-                    user.profilePic = profile.photos[0].value;
+                user[providerIdField] = profileId;
+                if (!user.profilePic && profilePic) {
+                    user.profilePic = profilePic;
                 }
                 await user.save();
                 return user;
@@ -124,18 +127,16 @@ userSchema.statics.findOrCreateOAuthUser = async function(profile, provider) {
         }
 
         // 3. If still not found, create a new user
-        console.log(`[OAuth - ${provider}] Creating new user with email:`, normalizedEmail || profile.username);
-            const userData = {
-            [providerIdField]: profile.id,
+        console.log(`[OAuth - ${provider}] Creating new user with email:`, normalizedEmail);
+        const userData = {
+            [providerIdField]: profileId,
             email: normalizedEmail,
-                username: provider === 'google' ? profile.displayName : profile.username,
-                profilePic: profile.photos?.[0]?.value || "",
-                isVerified: true // OAuth users are automatically verified
-            };
-            
-            user = new this(userData);
-            await user.save();
-        
+            username: usernameFromProfile,
+            profilePic: profilePic,
+            isVerified: true
+        };
+        user = new this(userData);
+        await user.save();
         console.log(`[OAuth - ${provider}] New user created:`, user.email);
         return user;
     } catch (error) {

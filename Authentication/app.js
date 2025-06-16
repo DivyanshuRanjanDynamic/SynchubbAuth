@@ -114,7 +114,14 @@ app.get("/auth/google/callback",
         try {
             console.log('Processing Google callback');
             console.log('User from passport:', req.user);
-            const user = await User.findOrCreateOAuthUser(req.user, 'google');
+            const { email, username, googleId, profilePic } = req.user;
+            const user = await User.findOrCreateOAuthUser({
+                email,
+                username,
+                googleId,
+                profilePic,
+                provider: 'google'
+            });
             const token = user.generateAccessToken();
             
             // Update last login
@@ -166,7 +173,14 @@ app.get("/auth/github/callback",
         try {
             console.log('Processing GitHub callback');
             console.log('User from passport:', req.user);
-            const user = await User.findOrCreateOAuthUser(req.user, 'github');
+            const { email, username, githubId, profilePic } = req.user;
+            const user = await User.findOrCreateOAuthUser({
+                email,
+                username,
+                githubId,
+                profilePic,
+                provider: 'github'
+            });
             const token = user.generateAccessToken();
             
             // Update last login
