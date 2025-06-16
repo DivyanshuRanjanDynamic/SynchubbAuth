@@ -26,6 +26,19 @@ passport.use(
                 let user = await User.findOne({ googleId: profile.id });
 
                 if (!user) {
+                    // Check if user exists with the same email
+                    const existingUser = await User.findOne({ email: profile.emails[0].value });
+                    if (existingUser) {
+                        // Link Google account to existing user
+                        existingUser.googleId = profile.id;
+                        if (!existingUser.profilePic) {
+                            existingUser.profilePic = profile.photos?.[0]?.value || "";
+                        }
+                        await existingUser.save();
+                        return done(null, existingUser);
+                    }
+
+                    // Create new user
                     user = new User({
                         googleId: profile.id,
                         email: profile.emails[0].value,
@@ -67,6 +80,22 @@ passport.use(
                 let user = await User.findOne({ githubId: profile.id });
 
                 if (!user) {
+                    // Check if user exists with the same email
+                    const email = profile.emails?.[0]?.value;
+                    if (email) {
+                        const existingUser = await User.findOne({ email });
+                        if (existingUser) {
+                            // Link GitHub account to existing user
+                            existingUser.githubId = profile.id;
+                            if (!existingUser.profilePic) {
+                                existingUser.profilePic = profile.photos?.[0]?.value || "";
+                            }
+                            await existingUser.save();
+                            return done(null, existingUser);
+                        }
+                    }
+
+                    // Create new user
                     user = new User({
                         githubId: profile.id,
                         username: profile.username,
@@ -88,13 +117,18 @@ passport.use(
 );
 
 // Serialize and deserialize user
-passport.serializeUser((user, done) => done(null, user.id));
+passport.serializeUser((user, done) => {
+    console.log('Serializing user:', user.id);
+    done(null, user.id);
+});
 
 passport.deserializeUser(async (id, done) => {
     try {
+        console.log('Deserializing user:', id);
         const user = await User.findById(id);
         done(null, user);
     } catch (error) {
+        console.error('Deserialize error:', error);
         done(error, null);
     }
 });

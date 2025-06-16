@@ -92,6 +92,7 @@ passport.deserializeUser(async (id, done) => {
 app.get("/google",
     (req, res, next) => {
         console.log('Initiating Google OAuth flow');
+        console.log('Request headers:', req.headers);
         passport.authenticate("google", { 
             scope: ["profile", "email"],
             prompt: "select_account"
@@ -99,18 +100,20 @@ app.get("/google",
     }
 );
 
-app.get("/google/callback",
+app.get("/auth/google/callback",
     (req, res, next) => {
         console.log('--- ENTERING GOOGLE CALLBACK ROUTE HANDLER ---');
         console.log('Received Google callback');
+        console.log('Callback query params:', req.query);
         passport.authenticate("google", {
             failureRedirect: `${process.env.CLIENT_URL}/auth/login?error=google_auth_failed`,
-            session: false // Crucial for stateless API usage
+            session: false
         })(req, res, next);
     },
     async (req, res) => {
         try {
             console.log('Processing Google callback');
+            console.log('User from passport:', req.user);
             const user = await User.findOrCreateOAuthUser(req.user, 'google');
             const token = user.generateAccessToken();
             
@@ -123,11 +126,13 @@ app.get("/google/callback",
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
                 sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-                domain: process.env.NODE_ENV === 'production' ? '.synchubb.in' : undefined
+                domain: process.env.NODE_ENV === 'production' ? '.synchubb.in' : undefined,
+                path: '/'
             };
+            console.log('Setting cookie with options:', options);
             res.cookie('accessToken', token, options);
 
-            // Redirect to dashboard (or wherever your frontend expects after login)
+            // Redirect to dashboard
             console.log('Redirecting to dashboard');
             res.redirect(`${process.env.CLIENT_URL}/dashboard/home`);
         } catch (error) {
@@ -140,24 +145,27 @@ app.get("/google/callback",
 app.get("/github",
     (req, res, next) => {
         console.log('Initiating GitHub OAuth flow');
+        console.log('Request headers:', req.headers);
         passport.authenticate("github", {
             scope: ["user:email"]
         })(req, res, next);
     }
 );
 
-app.get("/github/callback",
+app.get("/auth/github/callback",
     (req, res, next) => {
         console.log('--- ENTERING GITHUB CALLBACK ROUTE HANDLER ---');
         console.log('Received GitHub callback');
+        console.log('Callback query params:', req.query);
         passport.authenticate("github", {
             failureRedirect: `${process.env.CLIENT_URL}/auth/login?error=github_auth_failed`,
-            session: false // Crucial for stateless API usage
+            session: false
         })(req, res, next);
     },
     async (req, res) => {
         try {
             console.log('Processing GitHub callback');
+            console.log('User from passport:', req.user);
             const user = await User.findOrCreateOAuthUser(req.user, 'github');
             const token = user.generateAccessToken();
             
@@ -170,8 +178,10 @@ app.get("/github/callback",
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
                 sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-                domain: process.env.NODE_ENV === 'production' ? '.synchubb.in' : undefined
+                domain: process.env.NODE_ENV === 'production' ? '.synchubb.in' : undefined,
+                path: '/'
             };
+            console.log('Setting cookie with options:', options);
             res.cookie('accessToken', token, options);
 
             // Redirect to dashboard
