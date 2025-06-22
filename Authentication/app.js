@@ -42,8 +42,8 @@ app.use(helmet({
 }));
 
 // Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // CORS configuration
 app.use(cors({
@@ -114,37 +114,26 @@ app.get("/auth/google/callback",
         try {
             console.log('Processing Google callback');
             console.log('User from passport:', req.user);
-            const { email, username, googleId, profilePic } = req.user;
-            const user = await User.findOrCreateOAuthUser({
-                email,
-                username,
-                googleId,
-                profilePic,
-                provider: 'google'
-            });
-            const token = user.generateAccessToken();
+            
+            // Note: Passport strategy should return a user object from the DB
+            const user = req.user;
+            
+            // Generate a token
+
+            const {accessToken, refreshToken}= await TokenManager.generateTokens(user);
             
             // Update last login
             user.lastLogin = new Date();
-            await user.save();
+            await user.save({ validateBeforeSave: false });
 
-            // Set auth token in cookie
-            const options = {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-                domain: process.env.NODE_ENV === 'production' ? '.synchubb.in' : undefined,
-                path: '/'
-            };
-            console.log('Setting cookie with options:', options);
-            res.cookie('accessToken', token, options);
-
-            // Redirect to dashboard
-            console.log('Redirecting to dashboard');
-            res.redirect(`${process.env.CLIENT_URL}/dashboard/home`);
+            // Redirect to the frontend callback URL with the token
+            const redirectUrl = `${env.CLIENT_URL}/auth/callback?token=${accessToken}`;
+            console.log(`Redirecting to: ${redirectUrl}`);
+            res.redirect(redirectUrl);
+            
         } catch (error) {
             console.error('OAuth callback error:', error);
-            res.redirect(`${process.env.CLIENT_URL}/auth/login?error=oauth_error`);
+            res.redirect(`${env.CLIENT_URL}/auth/login?error=oauth_processing_failed`);
         }
     }
 );
@@ -173,37 +162,25 @@ app.get("/auth/github/callback",
         try {
             console.log('Processing GitHub callback');
             console.log('User from passport:', req.user);
-            const { email, username, githubId, profilePic } = req.user;
-            const user = await User.findOrCreateOAuthUser({
-                email,
-                username,
-                githubId,
-                profilePic,
-                provider: 'github'
-            });
-            const token = user.generateAccessToken();
             
+            // Note: Passport strategy should return a user object from the DB
+            const user = req.user;
+
+            // Generate a token
+            const {accessToken, refreshToken}= await  TokenManager.generateTokens(user);
+
             // Update last login
             user.lastLogin = new Date();
-            await user.save();
+            await user.save({ validateBeforeSave: false });
 
-            // Set auth token in cookie
-            const options = {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-                domain: process.env.NODE_ENV === 'production' ? '.synchubb.in' : undefined,
-                path: '/'
-            };
-            console.log('Setting cookie with options:', options);
-            res.cookie('accessToken', token, options);
-
-            // Redirect to dashboard
-            console.log('Redirecting to dashboard');
-            res.redirect(`${process.env.CLIENT_URL}/dashboard/home`);
+            // Redirect to the frontend callback URL with the token
+            const redirectUrl = `${env.CLIENT_URL}/auth/callback?token=${accessToken}`;
+            console.log(`Redirecting to: ${redirectUrl}`);
+            res.redirect(redirectUrl);
+            
         } catch (error) {
             console.error('OAuth callback error:', error);
-            res.redirect(`${process.env.CLIENT_URL}/auth/login?error=oauth_error`);
+            res.redirect(`${env.CLIENT_URL}/auth/login?error=oauth_processing_failed`);
         }
     }
 );

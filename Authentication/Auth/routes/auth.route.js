@@ -33,6 +33,7 @@ import { securityHeaders } from '../middleware/securityHeaders.js';
 import passport from "passport";
 import { User } from "../model/user.model.js";
 import mongoose from "mongoose";
+import postRoutes from './post.route.js';
 
 const router = express.Router();
 
@@ -293,6 +294,8 @@ router.get("/Home",
         });
     }
 );
+
+router.use('/posts', postRoutes);
 
 // Error handling for undefined routes
 router.use((req, res) => {
