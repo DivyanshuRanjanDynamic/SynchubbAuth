@@ -65,7 +65,12 @@ const userSchema = new mongoose.Schema({
     },
     lockUntil: {
         type: Date
-    }
+    },
+    // Saved posts
+    savedPosts: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Post'
+    }]
 }, {
     timestamps: true
 });

@@ -42,6 +42,7 @@ app.use(limiter);
 app.use(cors(corsOptions));
 app.use(compressionMiddleware);
 
+
 // Debug function to analyze certificate files (no longer directly used for server)
 function debugCertificateFiles() {
     console.log('debugCertificateFiles is not active in production setup.');
