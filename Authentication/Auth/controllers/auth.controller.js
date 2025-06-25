@@ -568,7 +568,7 @@ export const forgotPassword = asynchandler(async (req, res) => {
         const accessToken = await PasswordResetManager.generateAccessToken(user);
 
         // Create password reset URL
-        const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${accessToken}`;
+        const resetUrl = `${process.env.CLIENT_URL}/auth/reset-password/${accessToken}`;
 
         // Send email with reset link
         await emailService.sendPasswordResetEmail(user, resetUrl);
