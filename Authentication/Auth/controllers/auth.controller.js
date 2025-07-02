@@ -223,9 +223,12 @@ export const loginUser = asynchandler(async (req, res) => {
         });
 
         // Set cookies
-        const options = {
+        const isProd = process.env.NODE_ENV === 'production';
+        const cookieOptions = {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production'
+            secure: isProd,
+            sameSite: isProd ? 'none' : 'lax',
+            domain: isProd ? '.synchubb.in' : undefined
         };
 
         console.log('Login successful:', {
@@ -236,8 +239,8 @@ export const loginUser = asynchandler(async (req, res) => {
 
         return res
             .status(200)
-            .cookie("accessToken", accessToken, options)
-            .cookie("refreshToken", refreshToken, options)
+            .cookie("accessToken", accessToken, cookieOptions)
+            .cookie("refreshToken", refreshToken, cookieOptions)
             .json(
                 new ApiResponse(200, {
                     user: {
@@ -301,15 +304,18 @@ export const logoutUser = asynchandler(async (req, res) => {
     });
 
     // Clear cookies
-    const options = {
+    const isProd = process.env.NODE_ENV === 'production';
+    const cookieOptions = {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production'
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'lax',
+        domain: isProd ? '.synchubb.in' : undefined
     };
 
     return res
         .status(200)
-        .clearCookie("accessToken", options)
-        .clearCookie("refreshToken", options)
+        .clearCookie("accessToken", cookieOptions)
+        .clearCookie("refreshToken", cookieOptions)
         .json(new ApiResponse(200, null, "Logged out successfully"));
 });
 
@@ -439,15 +445,18 @@ export const deleteAccount = asynchandler(async (req, res) => {
     });
 
     // Clear cookies
-    const options = {
+    const isProd = process.env.NODE_ENV === 'production';
+    const cookieOptions = {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production'
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'lax',
+        domain: isProd ? '.synchubb.in' : undefined
     };
 
     return res
         .status(200)
-        .clearCookie("accessToken", options)
-        .clearCookie("refreshToken", options)
+        .clearCookie("accessToken", cookieOptions)
+        .clearCookie("refreshToken", cookieOptions)
         .json(new ApiResponse(200, null, "Account deleted successfully"));
 });
 
@@ -937,15 +946,18 @@ export const refreshAccessToken = asynchandler(async (req, res) => {
             session.refreshToken = newRefreshToken;
             await session.save();
 
-            const options = {
+            const isProd = process.env.NODE_ENV === 'production';
+            const cookieOptions = {
                 httpOnly: true,
-                secure: process.env.NODE_ENV === "production"
+                secure: isProd,
+                sameSite: isProd ? 'none' : 'lax',
+                domain: isProd ? '.synchubb.in' : undefined
             };
 
             return res
                 .status(200)
-                .cookie("accessToken", accessToken, options)
-                .cookie("refreshToken", newRefreshToken, options)
+                .cookie("accessToken", accessToken, cookieOptions)
+                .cookie("refreshToken", newRefreshToken, cookieOptions)
                 .json(
                     new ApiResponse(
                         200,
