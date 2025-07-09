@@ -19,10 +19,14 @@ cloudinary.config({
 export const uploadToCloudinary = async (fileBuffer, folder, options = {}) => {
   try {
     return new Promise((resolve, reject) => {
+      let resourceType = 'auto';
+      if ((options.mimetype && options.mimetype === 'application/pdf') || (options.filename && options.filename.match(/\.pdf$/i))) {
+        resourceType = 'raw';
+      }
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder,
-          resource_type: 'auto',
+          resource_type: resourceType,
           ...options
         },
         (error, result) => {
