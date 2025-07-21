@@ -46,6 +46,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // CORS configuration
+const isProd = process.env.NODE_ENV === 'production';
 app.use(cors({
     origin: process.env.CLIENT_URL || 'https://www.synchubb.in',
     credentials: true,
@@ -60,10 +61,10 @@ app.use(
         resave: false,
         saveUninitialized: false,
         cookie: {
-            secure: process.env.NODE_ENV === 'production',
+            secure: isProd,
             maxAge: 24 * 60 * 60 * 1000, // 24 hours
-            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-            domain: process.env.NODE_ENV === 'production' ? '.synchubb.in' : undefined
+            sameSite: isProd ? 'none' : 'lax',
+            domain: isProd ? '.synchubb.in' : undefined
         },
         name: 'synchubb.sid'
     })
