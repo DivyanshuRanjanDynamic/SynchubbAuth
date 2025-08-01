@@ -48,7 +48,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // CORS configuration
 const isProd = process.env.NODE_ENV === 'production';
 app.use(cors({
-    origin: process.env.CLIENT_URL || 'https://www.synchubb.in',
+    origin: [ process.env.CLIENT_URL , "https://www.synchubb.in" , "http://localhost:5173","http://localhost:8080","https://synchubb-matri-frontend.vercel.app/dashboard/maitri"] ,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
